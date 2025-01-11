@@ -407,8 +407,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "准备安装目录..."
     rm -rf "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
-    chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
-    chmod -R 755 "$COWRIE_INSTALL_DIR"
+    chown cowrie:cowrie "$COWRIE_INSTALL_DIR"
 
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
@@ -419,7 +418,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         source cowrie-env/bin/activate
         pip install --upgrade pip
         pip install -r requirements.txt
-        cp opt/cowrie.cfg.dist opt/cowrie.cfg
+        cp opt/cowrie.cfg.dist etc/cowrie.cfg
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
