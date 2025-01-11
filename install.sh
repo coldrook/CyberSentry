@@ -416,8 +416,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         git clone https://github.com/cowrie/cowrie.git .
         python3 -m virtualenv cowrie-env
         source cowrie-env/bin/activate
-        pip3 install --upgrade pip
-        pip3 install -r requirements.txt
+        pip install --upgrade pip
+        pip install -r /opt/cowrie/requirements.txt
         cp etc/cowrie.cfg.dist etc/cowrie.cfg
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
