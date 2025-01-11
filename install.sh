@@ -149,7 +149,7 @@ backup_with_timestamp() {
 }
 
 # 变量定义
-COWRIE_INSTALL_DIR="/opt/cowrie"
+COWRIE_INSTALL_DIR="/etc/cowrie"
 LOG_RETENTION_DAYS=30
 CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
 CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
