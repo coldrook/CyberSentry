@@ -149,7 +149,7 @@ backup_with_timestamp() {
 }
 
 # 变量定义
-COWRIE_INSTALL_DIR="/etc/cowrie"
+COWRIE_INSTALL_DIR="/opt/cowrie"
 LOG_RETENTION_DAYS=30
 CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
 CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
@@ -419,7 +419,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         source cowrie-env/bin/activate
         pip install --upgrade pip
         pip install -r requirements.txt
-        cp etc/cowrie.cfg.dist etc/cowrie.cfg
+        cp opt/cowrie.cfg.dist opt/cowrie.cfg
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
