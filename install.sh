@@ -604,12 +604,12 @@ EOF
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复默认配置"
                 mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                systemctl restart sshd
+                /etc/init.d/ssh restart
                 exit 1
             fi
 
             echo "应用新的 SSH 配置..."
-            systemctl restart sshd
+            /etc/init.d/ssh restart
 
             # 验证配置
             echo "验证 SSH 配置..."
@@ -625,7 +625,7 @@ EOF
                 if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
                     echo "恢复原始配置..."
                     mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                    systemctl restart sshd
+                    /etc/init.d/ssh restart  
                     exit 1
                 fi
             fi
