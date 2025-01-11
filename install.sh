@@ -439,6 +439,7 @@ fi
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
+SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 2 -type d -name "site-packages" -print -quit)
 cat <<EOF > /etc/systemd/system/cowrie.service
 [Unit]
 Description=Cowrie SSH Honeypot
@@ -448,10 +449,10 @@ After=network.target
 Type=simple
 User=cowrie
 Group=cowrie
-WorkingDirectory=$COWRIE_INSTALL_DIR
-Environment="PYTHONPATH=$COWRIE_INSTALL_DIR/cowrie-env/lib/python${PYTHON_VERSION}/site-packages"
+WorkingDirectory=$COWRIE_INSTALL_DIR/cowrie
+Environment="PYTHONPATH=$SITE_PACKAGES_DIR"
 Environment="PATH=$COWRIE_INSTALL_DIR/cowrie-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && bin/cowrie start -n'
+ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR/cowrie && source cowrie-env/bin/activate && bin/cowrie start -n'
 Restart=always
 RestartSec=30
 
@@ -462,7 +463,7 @@ EOF
 # 重载并启动服务
 systemctl daemon-reload
 systemctl enable cowrie
-systemctl restart cowrie
+systemctl start cowrie # 使用 start 而不是 restart
 
 # SSH 安全配置
 echo "检查 SSH 配置..."
