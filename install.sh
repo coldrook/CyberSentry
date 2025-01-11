@@ -741,7 +741,7 @@ EOF
     fi
 
     if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
-        systemctl restart sshd
+        /etc/init.d/ssh restart
     fi
 
     echo "SSH 配置状态："
