@@ -414,7 +414,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
         git clone https://github.com/cowrie/cowrie.git .
-        virtualenv cowrie-env
+        python3 -m virtualenv cowrie-env
         source cowrie-env/bin/activate
         pip3 install --upgrade pip
         pip3 install -r requirements.txt
