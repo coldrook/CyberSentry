@@ -407,7 +407,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "准备安装目录..."
     rm -rf "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
-    chown cowrie:cowrie "$COWRIE_INSTALL_DIR"
+    chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
+    chmod -R 755 "$COWRIE_INSTALL_DIR"
 
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
