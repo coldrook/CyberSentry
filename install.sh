@@ -379,11 +379,10 @@ else
 fi
 
 echo "开始安装 Cowrie..."
-
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
 COWRIE_INSTALLED=false
-if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/bin/cowrie" ]; then
+if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie/bin/cowrie" ]; then
     echo "检测到现有 Cowrie 安装，检查完整性..."
     if [ -f "/etc/systemd/system/cowrie.service" ] && [ -d "$COWRIE_INSTALL_DIR/var/log/cowrie" ]; then
         COWRIE_INSTALLED=true
@@ -464,6 +463,7 @@ EOF
 systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
+
 
 # SSH 安全配置
 echo "检查 SSH 配置..."
