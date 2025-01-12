@@ -420,6 +420,7 @@ else
     echo "日志清理已配置，跳过"
 fi
 
+# 变量定义
 COWRIE_INSTALL_DIR="/opt/cowrie" # 定义安装目录
 
 # 定义获取 Python 版本的函数
@@ -454,7 +455,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 准备目录
     echo "准备安装目录..."
-    rm -rf "$COWRIE_INSTALL_DIR"
+    rm -rf "$COWRIE_INSTALL_DIR" # 删除整个目录及其内容
     mkdir -p "$COWRIE_INSTALL_DIR"
     chown cowrie:cowrie "$COWRIE_INSTALL_DIR"
 
@@ -462,6 +463,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "执行安装..."
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
+        rm -rf * # 在 git clone 前清空目录
         git clone https://github.com/cowrie/cowrie.git . || {
             echo 'git clone 失败'
             exit 1
