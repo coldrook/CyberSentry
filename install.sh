@@ -94,24 +94,30 @@ setup_ssh_key() {
     case $key_type in
         "generate")
             local ssh_key_file="/root/.ssh/id_rsa"
-            if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N "" >/dev/null 2>&1; then
-                echo "错误：SSH 密钥生成失败"
+            echo "正在尝试生成 SSH 密钥..."
+            if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""; then
+                echo "错误：SSH 密钥生成失败，返回码: $?"
                 return 1
+            else
+                echo "SSH 密钥生成成功。"
             fi
-            
+
             # 确保 authorized_keys 文件存在并设置权限
             if [ ! -f /root/.ssh/authorized_keys ]; then
+                echo "authorized_keys 文件不存在，正在创建..."
                 touch /root/.ssh/authorized_keys
                 chmod 600 /root/.ssh/authorized_keys
             fi
-            
+
+            echo "正在将公钥添加到 authorized_keys..."
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
-            
+
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
+            echo "正在将私钥保存到临时文件: ${temp_key_file}"
             cat "$ssh_key_file" > "$temp_key_file"
             chmod 600 "$temp_key_file"
             echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
-            
+
             # 添加删除临时文件的逻辑
             trap 'rm -f "$temp_key_file"' EXIT
             ;;
@@ -122,13 +128,14 @@ setup_ssh_key() {
                 echo "错误：无效的公钥格式，请使用 ssh-rsa 或 ssh-ed25519 开头的公钥"
                 return 1
             fi
-            
+
             # 确保 authorized_keys 文件存在并设置权限
             if [ ! -f /root/.ssh/authorized_keys ]; then
                 touch /root/.ssh/authorized_keys
                 chmod 600 /root/.ssh/authorized_keys
             fi
-            
+
+            echo "正在将公钥添加到 authorized_keys..."
             echo "$pubkey" >> /root/.ssh/authorized_keys
             echo "公钥已添加"
             ;;
@@ -137,7 +144,7 @@ setup_ssh_key() {
             return 1
             ;;
     esac
-    
+
     chmod 600 /root/.ssh/authorized_keys # 确保权限正确
 }
 
