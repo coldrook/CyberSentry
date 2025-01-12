@@ -138,7 +138,7 @@ setup_ssh_key() {
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
             echo "用户输入的公钥是: '$pubkey'"  # 添加这行
-            if ! [[ "$pubkey" =~ ^ssh-ed25519\ ]]; then
+            if ! [[ "$pubkey" =~ ^ssh-ed25519 ]]; then
                 echo "错误：公钥必须以 ssh-ed25519 开头，后跟一个空格"
                 return 1
             fi
