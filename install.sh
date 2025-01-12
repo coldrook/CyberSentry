@@ -391,7 +391,9 @@ fi
 
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
-PYTHON_VERSION=$(get_python_version)
+get_python_version() {
+    python3 --version 2>&1 | awk '{print $2}'
+}
 # 查找 site-packages 目录
 SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
 if [ -z "$SITE_PACKAGES_DIR" ]; then
