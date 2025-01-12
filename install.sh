@@ -53,7 +53,7 @@ setup_ssh_key() {
     case $key_type in
         "generate")
             local ssh_key_file="/root/.ssh/id_rsa"
-            ssh-keygen -t rsa -b 4096 -f "$ssh_key_file" -N ""
+            ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
             cat "$ssh_key_file" > "$temp_key_file"
