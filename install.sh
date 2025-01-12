@@ -437,7 +437,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 确保权限正确
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
-    chmod -R 777 "$COWRIE_INSTALL_DIR"
+    chmod -R 755 "$COWRIE_INSTALL_DIR"
 fi
 
 # 配置 Cowrie 服务
