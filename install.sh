@@ -337,14 +337,14 @@ fi
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
     runuser -l cowrie -c "
-        cd $COWRIE_INSTALL_DIR
-        rm -rf * # 在 git clone 前清空目录
+        cd $COWRIE_INSTALL_DIR/cowrie
+        rm -rf *
         git clone https://github.com/cowrie/cowrie.git || {
             echo 'git clone 失败'
             exit 1
         }
-        cd cowrie # 进入 cowrie 目录
-        
+        cd cowrie
+
         if [ ! -f requirements.txt ]; then
             echo '错误：找不到 requirements.txt 文件'
             exit 1
@@ -360,7 +360,7 @@ fi
             echo '安装依赖失败'
             exit 1
         }
-        
+
         if [ ! -f etc/cowrie.cfg.dist ]; then
             echo '错误：找不到 etc/cowrie.cfg.dist 文件'
             exit 1
@@ -370,16 +370,19 @@ fi
             echo '复制配置文件失败'
             exit 1
         }
-        
-        sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
-        sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
-        sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
+
         mkdir -p var/log/cowrie
         chmod 700 var/log/cowrie
     " || {
         echo "Cowrie 安装失败"
         exit 1
     }
+
+    # 在 runuser 外部执行 sed 命令
+    echo "配置 Cowrie 设置..."
+    sed -i "s/hostname = svr04/hostname = fake-ssh-server/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
+    sed -i "s/^#listen_port=2222/listen_port=2222/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
+    sed -i "s/^#download_limit_size=10485760/download_limit_size=1048576/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
 
     # 确保权限正确
     echo "设置权限..."
