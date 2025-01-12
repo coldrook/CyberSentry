@@ -62,6 +62,16 @@ check_command() {
     }
 }
 
+check_ufw_rule() {
+    local port=$1
+    local comment=$2
+    if [ -z "$comment" ]; then
+        ufw status | grep -q "^$port/tcp"
+    else
+        ufw status | grep -q "^$port/tcp.*($comment)"
+    fi
+}
+
 backup_config() {
     local config_file="$1"
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
