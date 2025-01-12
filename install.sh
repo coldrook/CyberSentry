@@ -276,6 +276,12 @@ else
     echo "fail2ban 已安装，跳过配置"
 fi
 
+# 变量定义
+COWRIE_INSTALL_DIR="/opt/cowrie"
+LOG_RETENTION_DAYS=30
+CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
+CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
+
 # 日志清理脚本配置
 echo "检查日志清理配置..."
 if [ ! -f "$CLEANUP_LOG_SCRIPT" ]; then
@@ -297,12 +303,6 @@ EOFF
 else
     echo "日志清理已配置，跳过"
 fi
-
-# 变量定义
-COWRIE_INSTALL_DIR="/opt/cowrie"
-LOG_RETENTION_DAYS=30
-CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
-CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
 
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
