@@ -69,49 +69,12 @@ check_command() {
     }
 }
 
-# 修改防火墙规则检查函数
-check_ufw_rule() {
-    local port="$1"
-    local comment="$2"
-    
-    # 检查所有可能的规则格式（包括带注释和不带注释的）
-    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
-        # 如果指定了注释，检查是否有带注释的规则
-        if [ -n "$comment" ]; then
-            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
-                echo "端口 $port 已配置 ($comment)"
-                return 0
-            fi
-            # 存在端口但没有指定注释
-            echo "端口 $port 已存在其他规则"
-            return 2
-        else
-            echo "端口 $port 已配置"
-            return 0
-        fi
-    fi
-    return 1
-}
-
 backup_config() {
     local config_file="$1"
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
 }
 
-backup_with_timestamp() {
-    local file="$1"
-    local backup_limit="$2"
-    local timestamp=$(date +"%Y%m%d%H%M%S")
-    local backup_file="${file}.${timestamp}.bak"
-    
-    cp "$file" "$backup_file"
-    
-    # Remove old backups if they exceed the backup limit
-    if [ -n "$backup_limit" ]; then
-        ls -t "${file}".*.bak | tail -n +$(($backup_limit + 1)) | xargs -r rm --
-    fi
-}
-
+# 添加 Python 版本检测函数（在函数定义部分）
 get_python_version() {
     python3 --version 2>&1 | awk '{print $2}'
 }
@@ -194,20 +157,108 @@ check_installed() {
     return 1
 }
 
+# 修改防火墙规则检查函数
+check_ufw_rule() {
+    local port="$1"
+    local comment="$2"
+    
+    # 检查所有可能的规则格式（包括带注释和不带注释的）
+    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
+        # 如果指定了注释，检查是否有带注释的规则
+        if [ -n "$comment" ]; then
+            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
+                echo "端口 $port 已配置 ($comment)"
+                return 0
+            fi
+            # 存在端口但没有指定注释
+            echo "端口 $port 已存在其他规则"
+            return 2
+        else
+            echo "端口 $port 已配置"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# 在函数定义部分添加备份管理函数
+backup_with_timestamp() {
+    local file="$1"
+    local max_backups="${2:-5}"  # 默认最多保留5个备份
+    local backup_dir="/root/config_backups"
+    
+    # 创建备份目录
+    mkdir -p "$backup_dir"
+    
+    # 生成带时间戳的备份文件名
+    local timestamp=$(date '+%Y%m%d_%H%M%S')
+    local backup_file="${backup_dir}/$(basename ${file}).${timestamp}.bak"
+    
+    # 创建备份
+    if [ -f "$file" ]; then
+        cp "$file" "$backup_file"
+        echo "已创建配置备份: $backup_file"
+        
+        # 清理旧备份，只保留最新的N个
+        local old_backups=($(ls -t "${backup_dir}/$(basename ${file})".*.bak 2>/dev/null))
+        if [ ${#old_backups[@]} -gt "$max_backups" ]; then
+            echo "清理旧备份文件..."
+            for ((i="$max_backups"; i<${#old_backups[@]}; i++)); do
+                rm -f "${old_backups[i]}"
+                echo "已删除旧备份: ${old_backups[i]}"
+            done
+        fi
+        
+        return 0
+    fi
+    return 1
+}
+
+# 环境检查
+for cmd in apt systemctl grep awk; do
+    check_command "$cmd"
+done
+
+# 添加系统源更新函数
+update_sources() {
+    local os_version
+    if [ -f /etc/debian_version ]; then
+        os_version=$(cat /etc/debian_version)
+        case $os_version in
+            10*)
+                echo "检测到 Debian 10 (Buster)，更新软件源..."
+                # 备份当前源
+                cp /etc/apt/sources.list /etc/apt/sources.list.backup.$(date +%Y%m%d)
+                # 更新为 Debian 11 源
+                cat > /etc/apt/sources.list <<EOF
+deb http://deb.debian.org/debian bullseye main contrib non-free
+deb http://deb.debian.org/debian bullseye-updates main contrib non-free
+deb http://security.debian.org/debian-security bullseye-security main contrib non-free
+EOF
+                echo "已更新软件源为 Debian 11 (Bullseye)"
+                ;;
+        esac
+    fi
+}
+
+# 在环境检查后，系统更新前添加
+echo "检查系统软件源..."
+update_sources
+
 # 添加 Python 版本检测函数
 check_python_version() {
     local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     local required_major=3
-    local required_minor=10
-    local current_major=$(echo $current_version | cut -d. -f1)
-    local current_minor=$(echo $current_version | cut -d. -f2)
+    local required_minor=9
+    local current_major=$(echo "$current_version" | cut -d. -f1)
+    local current_minor=$(echo "$current_version" | cut -d. -f2)
     
-    if [ "$current_major" -gt "$required_major" ] || 
-       ([ "$current_major" -eq "$required_major" ] && [ "$current_minor" -ge "$required_minor" ]); then
+    if [[ "$current_major" -gt "$required_major" ]] ||
+       ([[ "$current_major" -eq "$required_major" ]] && [[ "$current_minor" -ge "$required_minor" ]]); then
         echo "当前 Python 版本 ($current_version) 满足要求"
         return 0
     else
-        echo "当前 Python 版本 ($current_version) 低于要求的 3.10"
+        echo "当前 Python 版本 ($current_version) 低于要求的 3.9"
         return 1
     fi
 }
@@ -216,7 +267,7 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
-    local python_version="3.11"
+    local python_version="3.9" # Default to 3.11, can be changed
     local python_pkg="python${python_version}"
     local python_dev_pkg="python${python_version}-dev"
     local python_venv_pkg="python${python_version}-venv"
@@ -244,8 +295,10 @@ upgrade_python() {
             ;;
         "ubuntu")
             case "$os_version" in
-                 "20.04"|"22.04"|"24.04")
+                "20.04"|"22.04"|"24.04")
                     sudo apt update
+                    sudo apt install -y software-properties-common
+                    sudo add-apt-repository ppa:deadsnakes/ppa -y
                     if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
                         sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
                         echo "成功将 Python 升级到 ${python_version}。"
@@ -273,8 +326,8 @@ fix_python_deps() {
     # 修复 apt_pkg 模块
     if ! python3 -c "import apt_pkg" 2>/dev/null; then
         echo "重新安装 python3-apt 以修复 apt_pkg 模块..."
-        apt-get remove --purge -y python3-apt
-        apt-get install -y python3-apt
+        sudo apt-get remove --purge -y python3-apt
+        sudo apt-get install -y python3-apt
     fi
 }
 
@@ -287,7 +340,7 @@ if ! check_python_version; then
         echo "Python 版本升级失败"
         exit 1
     fi
-    echo "Python 已成功升级到 3.10+"
+    echo "Python 已成功升级到 3.9+"
     fix_python_deps
 fi
 
