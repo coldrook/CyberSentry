@@ -77,6 +77,20 @@ backup_config() {
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
 }
 
+backup_with_timestamp() {
+    local file="$1"
+    local backup_limit="$2"
+    local timestamp=$(date +"%Y%m%d%H%M%S")
+    local backup_file="${file}.${timestamp}.bak"
+    
+    cp "$file" "$backup_file"
+    
+    # Remove old backups if they exceed the backup limit
+    if [ -n "$backup_limit" ]; then
+        ls -t "${file}".*.bak | tail -n +$(($backup_limit + 1)) | xargs -r rm --
+    fi
+}
+
 get_python_version() {
     python3 --version 2>&1 | awk '{print $2}'
 }
