@@ -426,7 +426,66 @@ EOF
 
     echo "====fail2ban 配置完成===="
 else
-    echo "fail2ban 已安装，跳过配置"
+    echo "fail2ban 已安装。"
+    read -r -p "是否覆盖现有配置？(y/N): " overwrite
+    if [[ "$overwrite" =~ ^([yY])+$ ]]; then
+        echo "====开始覆盖 fail2ban 配置===="
+        # 备份配置
+        echo "1. 备份 fail2ban 配置..."
+        if [ -f /etc/fail2ban/jail.local ]; then
+            backup_with_timestamp "/etc/fail2ban/jail.local" 3
+        fi
+
+        # 写入新配置
+        echo "2. 写入新配置..."
+        if ! cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+bantime = 86400
+maxretry = 3
+findtime = 1800
+action = %(action_)s
+
+[sshd]
+backend=systemd
+enabled=true
+filter=sshd
+logpath = /var/log/auth.log
+EOF
+        then
+            echo "错误：无法写入 fail2ban 配置文件"
+            exit 1
+        fi
+        echo "配置文件写入成功"
+
+        # 测试配置
+        echo "3. 测试配置文件..."
+        if ! fail2ban-client -t; then
+            echo "错误：fail2ban 配置测试失败"
+            exit 1
+        fi
+        echo "配置文件测试通过"
+
+        # 重启服务
+        echo "4. 重启 fail2ban 服务..."
+        if ! systemctl restart fail2ban; then
+            echo "错误：fail2ban 服务重启失败"
+            journalctl -u fail2ban --no-pager -n 50
+            exit 1
+        fi
+
+        # 检查服务状态
+        echo "5. 检查服务状态..."
+        if ! systemctl is-active --quiet fail2ban; then
+            echo "错误：fail2ban 服务未能正常启动"
+            systemctl status fail2ban
+            exit 1
+        fi
+        echo "====fail2ban 配置覆盖完成===="
+
+    else
+        echo "跳过配置覆盖。"
+    fi
 fi
 
 # 变量定义
