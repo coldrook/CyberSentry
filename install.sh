@@ -438,13 +438,14 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
     chmod -R 755 "$COWRIE_INSTALL_DIR"
+    chmod -R 755 "$COWRIE_INSTALL_DIR/cowrie/cowrie-env/lib/"
 fi
 
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
 # 查找 site-packages 目录
-SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
+SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
 if [ -z "$SITE_PACKAGES_DIR" ]; then
     echo "错误：无法找到 site-packages 目录"
     exit 1
