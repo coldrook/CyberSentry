@@ -415,7 +415,6 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
         git clone https://github.com/cowrie/cowrie.git cowrie
-        chmod 700 /cowrie # 在 runuser 中执行 chmod
         cd cowrie # 进入 cowrie 目录
         python3 -m virtualenv cowrie-env
         source cowrie-env/bin/activate &&
