@@ -415,15 +415,15 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "执行安装..."
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
-        git clone https://github.com/cowrie/cowrie .
+        git clone https://github.com/cowrie/cowrie
         cd cowrie # 进入 cowrie 目录
         python3 -m virtualenv cowrie-env || {
             echo '创建虚拟环境失败'
             exit 1
         }
         source cowrie-env/bin/activate &&
-        python -m pip install --upgrade pip &&
-        python -m pip install --upgrade -r requirements.txt
+        pip install --upgrade pip &&
+        pip install --upgrade -r requirements.txt
         cp etc/cowrie.cfg.dist etc/cowrie.cfg
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
