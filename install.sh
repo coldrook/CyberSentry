@@ -40,6 +40,20 @@ apt install -y cron || {
     exit 1
 }
 
+# 安装 rsyslog
+echo "安装 rsyslog..."
+apt install -y rsyslog || {
+    echo "rsyslog 安装失败"
+    exit 1
+}
+
+# 安装 ufw
+echo "安装 ufw..."
+apt install -y ufw || {
+    echo "ufw 安装失败"
+    exit 1
+}
+
 # 函数定义
 check_command() {
     command -v "$1" >/dev/null 2>&1 || {
