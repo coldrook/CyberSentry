@@ -202,46 +202,52 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
+    local python_version="3.11"
+    local python_pkg="python${python_version}"
+    local python_dev_pkg="python${python_version}-dev"
+    local python_venv_pkg="python${python_version}-venv"
+
+    echo "开始升级 Python 到 ${python_version}..."
 
     case "$os_id" in
         "debian")
             case "$os_version" in
-                "11"|"12")
+                "10"|"11"|"12")
                     sudo apt update
-                    if sudo apt install -y python3.11 python3.11-dev python3.11-venv; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-                        echo "Python 3.11 installed and set as default."
+                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
+                        echo "成功将 Python 升级到 ${python_version}。"
                     else
-                        echo "Error: Failed to install Python 3.11."
+                        echo "升级 Python 到 ${python_version} 失败。"
                         return 1
                     fi
                     ;;
                 *)
-                    echo "Error: Unsupported Debian version: $os_version"
+                    echo "不支持的 Debian 版本: ${os_version}"
                     return 1
                     ;;
             esac
             ;;
         "ubuntu")
             case "$os_version" in
-                "22.04"|"24.04")
-                     sudo apt update
-                    if sudo apt install -y python3.11 python3.11-dev python3.11-venv; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-                        echo "Python 3.11 installed and set as default."
+                 "20.04"|"22.04"|"24.04")
+                    sudo apt update
+                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
+                        echo "成功将 Python 升级到 ${python_version}。"
                     else
-                        echo "Error: Failed to install Python 3.11."
+                        echo "升级 Python 到 ${python_version} 失败。"
                         return 1
                     fi
                     ;;
                 *)
-                    echo "Error: Unsupported Ubuntu version: $os_version"
+                    echo "不支持的 Ubuntu 版本: ${os_version}"
                     return 1
                     ;;
             esac
             ;;
         *)
-            echo "Error: Unsupported OS: $os_id"
+            echo "不支持的操作系统: ${os_id}"
             return 1
             ;;
     esac
