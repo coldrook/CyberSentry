@@ -69,14 +69,28 @@ check_command() {
     }
 }
 
+# 修改防火墙规则检查函数
 check_ufw_rule() {
-    local port=$1
-    local comment=$2
-    if [ -z "$comment" ]; then
-        ufw status | grep -q "^$port/tcp"
-    else
-        ufw status | grep -q "^$port/tcp.*($comment)"
+    local port="$1"
+    local comment="$2"
+    
+    # 检查所有可能的规则格式（包括带注释和不带注释的）
+    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
+        # 如果指定了注释，检查是否有带注释的规则
+        if [ -n "$comment" ]; then
+            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
+                echo "端口 $port 已配置 ($comment)"
+                return 0
+            fi
+            # 存在端口但没有指定注释
+            echo "端口 $port 已存在其他规则"
+            return 2
+        else
+            echo "端口 $port 已配置"
+            return 0
+        fi
     fi
+    return 1
 }
 
 backup_config() {
