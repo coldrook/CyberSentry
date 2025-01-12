@@ -138,8 +138,8 @@ setup_ssh_key() {
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
             echo "用户输入的公钥是: '$pubkey'"  # 添加这行
-            if ! [[ "$pubkey" =~ ^(ssh-rsa|ssh-ed25519)\s+[A-Za-z0-9+/=]+\s+.*$ ]]; then
-                echo "错误：无效的公钥格式，请使用 ssh-rsa 或 ssh-ed25519 开头的公钥"
+            if ! [[ "$pubkey" =~ ^ssh-(ed25519) ]]; then
+                echo "错误：公钥必须以ssh-ed25519 开头"
                 return 1
             fi
 
