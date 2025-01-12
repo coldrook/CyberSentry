@@ -447,7 +447,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 创建 Cowrie 用户
     echo "创建 Cowrie 用户..."
     if ! id cowrie &>/dev/null; then
-        useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {
+        useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {  
             echo "创建 cowrie 用户失败"
             exit 1
         }
@@ -464,7 +464,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
         rm -rf * # 在 git clone 前清空目录
-        git clone https://github.com/cowrie/cowrie.git . || {
+        git clone https://github.com/cowrie/cowrie.git || {
             echo 'git clone 失败'
             exit 1
         }
