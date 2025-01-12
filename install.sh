@@ -424,7 +424,7 @@ echo "开始安装 Cowrie..."
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
 COWRIE_INSTALLED=false
-if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie/bin/cowrie" ]; then
+if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ]; then
     echo "检测到现有 Cowrie 安装，检查完整性..."
     if [ -f "/etc/systemd/system/cowrie.service" ] && [ -d "$COWRIE_INSTALL_DIR/var/log/cowrie" ]; then
         COWRIE_INSTALLED=true
@@ -460,7 +460,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
             echo '创建虚拟环境失败'
             exit 1
         }
-        chmod -R 755 "$COWRIE_INSTALL_DIR/cowrie-env/bin/activate/"
+        chmod -R 755 "$COWRIE_INSTALL_DIR/cowrie-env/bin/"
         source cowrie-env/bin/activate &&
         pip install --upgrade pip &&
         pip install --upgrade -r requirements.txt
