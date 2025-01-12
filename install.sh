@@ -62,28 +62,55 @@ setup_ssh_key() {
     local key_type="$1"
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
-    
+
     case $key_type in
         "generate")
             local ssh_key_file="/root/.ssh/id_rsa"
-            ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""
+            if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N "" >/dev/null 2>&1; then
+                echo "错误：SSH 密钥生成失败"
+                return 1
+            fi
+            
+            # 确保 authorized_keys 文件存在并设置权限
+            if [ ! -f /root/.ssh/authorized_keys ]; then
+                touch /root/.ssh/authorized_keys
+                chmod 600 /root/.ssh/authorized_keys
+            fi
+            
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
+            
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
             cat "$ssh_key_file" > "$temp_key_file"
             chmod 600 "$temp_key_file"
             echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
+            
+            # 添加删除临时文件的逻辑
+            trap 'rm -f "$temp_key_file"' EXIT
             ;;
         "import")
-            read -r -p "请输入 SSH 公钥: " pubkey
-            [[ $pubkey == ssh-rsa* ]] || {
-                echo "错误：无效的公钥格式"
+            read -r -p "请输入 SSH 公钥 (ssh-rsa/ssh-ed25519 ...): " pubkey
+            # 更严格的公钥格式检查
+            if ! [[ "$pubkey" =~ ^(ssh-rsa|ssh-ed25519)\s+[A-Za-z0-9+/=]+\s+.*$ ]]; then
+                echo "错误：无效的公钥格式，请使用 ssh-rsa 或 ssh-ed25519 开头的公钥"
                 return 1
-            }
+            fi
+            
+            # 确保 authorized_keys 文件存在并设置权限
+            if [ ! -f /root/.ssh/authorized_keys ]; then
+                touch /root/.ssh/authorized_keys
+                chmod 600 /root/.ssh/authorized_keys
+            fi
+            
             echo "$pubkey" >> /root/.ssh/authorized_keys
             echo "公钥已添加"
             ;;
+        *)
+            echo "错误：无效的密钥类型，请使用 'generate' 或 'import'"
+            return 1
+            ;;
     esac
-    chmod 600 /root/.ssh/authorized_keys
+    
+    chmod 600 /root/.ssh/authorized_keys # 确保权限正确
 }
 
 check_installed() {
