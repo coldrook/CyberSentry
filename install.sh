@@ -318,7 +318,9 @@ maxretry = 3
 action = %(action_)s
 
 [sshd]
-enabled = true
+backend=systemd
+enabled=true
+filter=sshd
 logpath = /var/log/auth.log
 EOF
     then
