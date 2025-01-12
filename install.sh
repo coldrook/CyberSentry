@@ -427,6 +427,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
+        mkdir -p cowrie-env/lib
+        chmod 700 cowrie-env/lib
         mkdir -p var/log/cowrie
         chmod 700 var/log/cowrie
     " || {
