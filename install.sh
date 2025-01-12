@@ -420,11 +420,19 @@ else
     echo "日志清理已配置，跳过"
 fi
 
+COWRIE_INSTALL_DIR="/opt/cowrie" # 定义安装目录
+
+# 定义获取 Python 版本的函数
+get_python_version() {
+  python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"
+}
+
 echo "开始安装 Cowrie..."
+
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
 COWRIE_INSTALLED=false
-if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ]; then
+if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie/bin/cowrie" ]; then
     echo "检测到现有 Cowrie 安装，检查完整性..."
     if [ -f "/etc/systemd/system/cowrie.service" ] && [ -d "$COWRIE_INSTALL_DIR/var/log/cowrie" ]; then
         COWRIE_INSTALLED=true
@@ -449,22 +457,43 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     rm -rf "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
     chown cowrie:cowrie "$COWRIE_INSTALL_DIR"
-    chmod -R 755 "$COWRIE_INSTALL_DIR"
-    
+
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
-        git clone https://github.com/cowrie/cowrie .
+        git clone https://github.com/cowrie/cowrie.git . || {
+            echo 'git clone 失败'
+            exit 1
+        }
+        cd cowrie # 进入 cowrie 目录
+        
+        if [ ! -f requirements.txt ]; then
+            echo '错误：找不到 requirements.txt 文件'
+            exit 1
+        fi
+
         python3 -m virtualenv cowrie-env || {
             echo '创建虚拟环境失败'
             exit 1
         }
-        chmod -R 755 "$COWRIE_INSTALL_DIR/cowrie-env/bin/"
         source cowrie-env/bin/activate &&
         pip install --upgrade pip &&
-        pip install --upgrade -r requirements.txt
-        cp etc/cowrie.cfg.dist etc/cowrie.cfg
+        pip install -r requirements.txt || {
+            echo '安装依赖失败'
+            exit 1
+        }
+        
+        if [ ! -f etc/cowrie.cfg.dist ]; then
+            echo '错误：找不到 etc/cowrie.cfg.dist 文件'
+            exit 1
+        fi
+
+        cp etc/cowrie.cfg.dist etc/cowrie.cfg || {
+            echo '复制配置文件失败'
+            exit 1
+        }
+        
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
@@ -485,7 +514,7 @@ fi
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
 # 查找 site-packages 目录
-SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)  
+SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
 if [ -z "$SITE_PACKAGES_DIR" ]; then
     echo "错误：无法找到 site-packages 目录"
     exit 1
@@ -515,7 +544,6 @@ EOF
 systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
-
 
 # SSH 安全配置
 echo "检查 SSH 配置..."
