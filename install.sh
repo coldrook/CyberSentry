@@ -107,7 +107,7 @@ setup_ssh_key() {
 
     case $key_type in
         "generate")
-            local ssh_key_file="/root/.ssh/id_rsa"
+            local ssh_key_file="/root/.ssh/id_ed25519_256"
             echo "正在尝试生成 SSH 密钥..."
             if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""; then
                 echo "错误：SSH 密钥生成失败，返回码: $?"
