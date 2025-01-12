@@ -414,6 +414,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
     runuser -l cowrie -c "
+        su - cowrie
         cd $COWRIE_INSTALL_DIR
         git clone https://github.com/cowrie/cowrie .
         python3 -m virtualenv cowrie-env || {
