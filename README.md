@@ -37,7 +37,7 @@
 ### 一键安装
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/CurtisLu1/CyberSentry/main/install.sh)
+bash <(curl -sL https://raw.githubusercontent.com/coldrook/CyberSentry/refs/heads/main/install.sh)
 ```
 
 ### 系统要求
