@@ -425,6 +425,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
         mkdir -p var/log/cowrie
+        chmod 700 var/log/cowrie # 在 runuser 中执行 chmod
     " || {
         echo "Cowrie 安装失败"
         exit 1
@@ -434,7 +435,6 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
     chmod -R 755 "$COWRIE_INSTALL_DIR"
-    chmod 700 "$COWRIE_INSTALL_DIR/var/log/cowrie"
 fi
 
 # 配置 Cowrie 服务
