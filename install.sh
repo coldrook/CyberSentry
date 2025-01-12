@@ -424,7 +424,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         sed -i 's/hostname = svr04/hostname = fake-ssh-server/' etc/cowrie.cfg
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
-        mkdir -p var/log/cowrie
+        mkdir -p cowrie/var/log/cowrie
     " || {
         echo "Cowrie 安装失败"
         exit 1
@@ -434,7 +434,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
     chmod -R 755 "$COWRIE_INSTALL_DIR"
-    chmod 700 "$COWRIE_INSTALL_DIR/var/log/cowrie"
+    chmod 700 "$COWRIE_INSTALL_DIR/cowrie/var/log/cowrie"
 fi
 
 # 配置 Cowrie 服务
