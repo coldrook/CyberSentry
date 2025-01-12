@@ -136,7 +136,7 @@ setup_ssh_key() {
             trap 'rm -f "$temp_key_file"' EXIT
             ;;
         "import")
-            read -r -p "请输入 SSH 公钥 (ssh-rsa/ssh-ed25519 ...): " pubkey
+            read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
             # 更严格的公钥格式检查
             if ! [[ "$pubkey" =~ ^(ssh-rsa|ssh-ed25519)\s+[A-Za-z0-9+/=]+\s+.*$ ]]; then
                 echo "错误：无效的公钥格式，请使用 ssh-rsa 或 ssh-ed25519 开头的公钥"
