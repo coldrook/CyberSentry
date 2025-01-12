@@ -326,7 +326,6 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
             exit 1
             } 
        fi
-fi
 
     # 准备目录
     echo "准备安装目录..."
