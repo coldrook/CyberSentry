@@ -202,25 +202,47 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
-    
+
     case "$os_id" in
         "debian")
             case "$os_version" in
-                "12")
-                    apt update
-                    apt install -y python3.11 python3.11-dev python3.11-venv
-                    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+                "11"|"12")
+                    sudo apt update
+                    if sudo apt install -y python3.11 python3.11-dev python3.11-venv; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+                        echo "Python 3.11 installed and set as default."
+                    else
+                        echo "Error: Failed to install Python 3.11."
+                        return 1
+                    fi
+                    ;;
+                *)
+                    echo "Error: Unsupported Debian version: $os_version"
+                    return 1
                     ;;
             esac
             ;;
         "ubuntu")
             case "$os_version" in
-                "24.04")
-                    apt update
-                    apt install -y python3.11 python3.11-dev python3.11-venv
-                    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+                "22.04"|"24.04")
+                     sudo apt update
+                    if sudo apt install -y python3.11 python3.11-dev python3.11-venv; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+                        echo "Python 3.11 installed and set as default."
+                    else
+                        echo "Error: Failed to install Python 3.11."
+                        return 1
+                    fi
+                    ;;
+                *)
+                    echo "Error: Unsupported Ubuntu version: $os_version"
+                    return 1
                     ;;
             esac
+            ;;
+        *)
+            echo "Error: Unsupported OS: $os_id"
+            return 1
             ;;
     esac
 }
