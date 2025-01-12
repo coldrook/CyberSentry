@@ -414,9 +414,12 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "执行安装..."
     runuser -l cowrie -c "
         cd $COWRIE_INSTALL_DIR
-        git clone https://github.com/cowrie/cowrie.git cowrie
+        git clone https://github.com/cowrie/cowrie.git .
         cd cowrie # 进入 cowrie 目录
-        python3 -m virtualenv cowrie-env
+        python3 -m virtualenv cowrie-env || {
+            echo '创建虚拟环境失败'
+            exit 1
+        }
         source cowrie-env/bin/activate &&
         pip install --upgrade pip &&
         pip install -r requirements.txt
@@ -425,7 +428,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
         sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
         mkdir -p var/log/cowrie
-        chmod 700 var/log/cowrie # 在 runuser 中执行 chmod
+        chmod 700 var/log/cowrie
     " || {
         echo "Cowrie 安装失败"
         exit 1
@@ -440,7 +443,13 @@ fi
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
-SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 2 -type d -name "site-packages" -print -quit)
+# 查找 site-packages 目录
+SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
+if [ -z "$SITE_PACKAGES_DIR" ]; then
+    echo "错误：无法找到 site-packages 目录"
+    exit 1
+fi
+
 cat <<EOF > /etc/systemd/system/cowrie.service
 [Unit]
 Description=Cowrie SSH Honeypot
