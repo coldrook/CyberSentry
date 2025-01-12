@@ -53,6 +53,10 @@ backup_config() {
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
 }
 
+get_python_version() {
+    python3 --version 2>&1 | awk '{print $2}'
+}
+
 write_config() {
     local file="$1"
     cat > "$file"
@@ -391,9 +395,7 @@ fi
 
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
-get_python_version() {
-    python3 --version 2>&1 | awk '{print $2}'
-}
+PYTHON_VERSION=$(get_python_version)
 # 查找 site-packages 目录
 SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
 if [ -z "$SITE_PACKAGES_DIR" ]; then
