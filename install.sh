@@ -280,12 +280,14 @@ if ! check_installed "fail2ban" "systemctl is-active --quiet fail2ban"; then
     echo "2. 写入新配置..."
     if ! cat > /etc/fail2ban/jail.local <<'EOF'
 [DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
 bantime = 86400
-findtime = 300
 maxretry = 3
+findtime = 1800
 action = %(action_)s
 
 [sshd]
+backend=systemd
 enabled=true
 filter=sshd
 logpath = /var/log/auth.log
