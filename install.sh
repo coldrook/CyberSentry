@@ -450,8 +450,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {  
             echo "创建 cowrie 用户失败"
             exit 1
-        }
-    fi
+            } 
+       fi
 
     # 准备目录
     echo "准备安装目录..."
