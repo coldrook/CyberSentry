@@ -454,13 +454,13 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 以 cowrie 用户身份执行安装
     echo "执行安装..."
     runuser -l cowrie -c "
-        su - cowrie
         cd $COWRIE_INSTALL_DIR
         git clone https://github.com/cowrie/cowrie .
         python3 -m virtualenv cowrie-env || {
             echo '创建虚拟环境失败'
             exit 1
         }
+        chmod -R 755 "$COWRIE_INSTALL_DIR/cowrie-env/bin/activate/"
         source cowrie-env/bin/activate &&
         pip install --upgrade pip &&
         pip install --upgrade -r requirements.txt
@@ -485,7 +485,7 @@ fi
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
 # 查找 site-packages 目录
-SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
+SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)  
 if [ -z "$SITE_PACKAGES_DIR" ]; then
     echo "错误：无法找到 site-packages 目录"
     exit 1
