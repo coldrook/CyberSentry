@@ -47,6 +47,13 @@ apt install -y rsyslog || {
     exit 1
 }
 
+# 安装 logrotate
+echo "安装 logrotate..."
+apt install -y logrotate || {
+    echo "logrotate 安装失败"
+    exit 1
+}
+
 # 安装 ufw
 echo "安装 ufw..."
 apt install -y ufw || {
