@@ -124,135 +124,20 @@ check_installed() {
     return 1
 }
 
-# 添加 Python 版本检测函数（在函数定义部分）
-get_python_version() {
-    local py_version
-    py_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    echo "$py_version"
-}
-
-# 修改防火墙规则检查函数
-check_ufw_rule() {
-    local port="$1"
-    local comment="$2"
-    
-    # 检查所有可能的规则格式（包括带注释和不带注释的）
-    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
-        # 如果指定了注释，检查是否有带注释的规则
-        if [ -n "$comment" ]; then
-            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
-                echo "端口 $port 已配置 ($comment)"
-                return 0
-            fi
-            # 存在端口但没有指定注释
-            echo "端口 $port 已存在其他规则"
-            return 2
-        else
-            echo "端口 $port 已配置"
-            return 0
-        fi
-    fi
-    return 1
-}
-
-# 在函数定义部分添加备份管理函数
-backup_with_timestamp() {
-    local file="$1"
-    local max_backups="${2:-5}"  # 默认最多保留5个备份
-    local backup_dir="/root/config_backups"
-    
-    # 创建备份目录
-    mkdir -p "$backup_dir"
-    
-    # 生成带时间戳的备份文件名
-    local timestamp=$(date '+%Y%m%d_%H%M%S')
-    local backup_file="${backup_dir}/$(basename ${file}).${timestamp}.bak"
-    
-    # 创建备份
-    if [ -f "$file" ]; then
-        cp "$file" "$backup_file"
-        echo "已创建配置备份: $backup_file"
-        
-        # 清理旧备份，只保留最新的N个
-        local old_backups=($(ls -t "${backup_dir}/$(basename ${file})".*.bak 2>/dev/null))
-        if [ ${#old_backups[@]} -gt "$max_backups" ]; then
-            echo "清理旧备份文件..."
-            for ((i="$max_backups"; i<${#old_backups[@]}; i++)); do
-                rm -f "${old_backups[i]}"
-                echo "已删除旧备份: ${old_backups[i]}"
-            done
-        fi
-        
-        return 0
-    fi
-    return 1
-}
-
-# 变量定义
-COWRIE_INSTALL_DIR="/opt/cowrie"
-LOG_RETENTION_DAYS=30
-CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
-CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
-
-# 在开始时先检查并安装 net-tools
-echo "检查 netstat 命令..."
-if ! command -v netstat &> /dev/null; then
-    echo "netstat 命令未找到，正在安装 net-tools..."
-    apt update
-    apt install -y net-tools || {
-        echo "net-tools 安装失败"
-        exit 1
-    }
-    echo "net-tools 安装完成"
-fi
-
-# 环境检查
-for cmd in apt systemctl grep awk; do
-    check_command "$cmd"
-done
-
-# 添加系统源更新函数
-update_sources() {
-    local os_version
-    if [ -f /etc/debian_version ]; then
-        os_version=$(cat /etc/debian_version)
-        case $os_version in
-            10*)
-                echo "检测到 Debian 10 (Buster)，更新软件源..."
-                # 备份当前源
-                cp /etc/apt/sources.list /etc/apt/sources.list.backup.$(date +%Y%m%d)
-                # 更新为 Debian 11 源
-                cat > /etc/apt/sources.list <<EOF
-deb http://deb.debian.org/debian bullseye main contrib non-free
-deb http://deb.debian.org/debian bullseye-updates main contrib non-free
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free
-EOF
-                echo "已更新软件源为 Debian 11 (Bullseye)"
-                ;;
-        esac
-    fi
-}
-
-# 在环境检查后，系统更新前添加
-echo "检查系统软件源..."
-update_sources
-
-# 修改 Python 版本检测函数
+# 添加 Python 版本检测函数
 check_python_version() {
     local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    # 将版本号分解为主版本和次版本
     local required_major=3
-    local required_minor=9
+    local required_minor=10
     local current_major=$(echo $current_version | cut -d. -f1)
     local current_minor=$(echo $current_version | cut -d. -f2)
     
-    # 先比较主版本，如果主版本相同则比较次版本
     if [ "$current_major" -gt "$required_major" ] || 
        ([ "$current_major" -eq "$required_major" ] && [ "$current_minor" -ge "$required_minor" ]); then
         echo "当前 Python 版本 ($current_version) 满足要求"
         return 0
     else
-        echo "当前 Python 版本 ($current_version) 低于要求的 3.9"
+        echo "当前 Python 版本 ($current_version) 低于要求的 3.10"
         return 1
     fi
 }
@@ -265,25 +150,23 @@ upgrade_python() {
     case "$os_id" in
         "debian")
             case "$os_version" in
-                "10")
-                    echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
+                "12")
                     apt update
-                    apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv
-                    ;;
-                "11"|"12")
-                    apt update
-                    apt install -y python3.9 python3.9-dev python3.9-venv
+                    apt install -y python3.11 python3.11-dev python3.11-venv
+                    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
                     ;;
             esac
             ;;
         "ubuntu")
-            add-apt-repository -y ppa:deadsnakes/ppa
-            apt update
-            apt install -y python3.9 python3.9-dev python3.9-venv
+            case "$os_version" in
+                "24.04")
+                    apt update
+                    apt install -y python3.11 python3.11-dev python3.11-venv
+                    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+                    ;;
+            esac
             ;;
     esac
-    
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 }
 
 # 添加 Python 依赖修复函数
@@ -306,7 +189,7 @@ if ! check_python_version; then
         echo "Python 版本升级失败"
         exit 1
     fi
-    echo "Python 已成功升级到 3.9+"
+    echo "Python 已成功升级到 3.10+"
     fix_python_deps
 fi
 
@@ -322,7 +205,7 @@ fi
 
 # 系统依赖安装和 Python 环境检查
 echo "安装依赖..."
-apt install -y fail2ban python3-virtualenv git curl netstat-nat || {
+apt install -y fail2ban python3-virtualenv git curl || {
     echo "依赖安装失败，请检查系统配置"
     exit 1
 }
@@ -330,12 +213,8 @@ apt install -y fail2ban python3-virtualenv git curl netstat-nat || {
 # 检查 Python 环境
 if ! python3 -c "import distutils" 2>/dev/null; then
     echo "正在安装 Python 兼容环境..."
-    apt install -y python3.7 python3.7-distutils
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
+    python3 -m ensurepip
 fi
-
-apt upgrade -y
-apt install -y fail2ban python3-virtualenv git curl netstat-nat
 
 # Fail2ban 配置
 echo "检查 fail2ban 配置..."
@@ -358,7 +237,6 @@ maxretry = 3
 action = %(action_)s
 
 [sshd]
-backend=systemd
 enabled=true
 filter=sshd
 logpath = /var/log/auth.log
@@ -404,8 +282,8 @@ if [ ! -f "$CLEANUP_LOG_SCRIPT" ]; then
     echo "配置日志清理..."
     cat > "$CLEANUP_LOG_SCRIPT" <<'EOFF'
 #!/bin/bash
-find /var/log -type f -name "*.log" -mtime +30 -exec rm -f {} \;
-echo "$(date): Logs older than 30 days have been deleted." >> /var/log/cleanup.log
+find /var/log -type f -name "*.log" -mtime +$LOG_RETENTION_DAYS -exec rm -f {} \;
+echo "$(date): Logs older than $LOG_RETENTION_DAYS days have been deleted." >> /var/log/cleanup.log
 EOFF
 
     chmod +x "$CLEANUP_LOG_SCRIPT"
@@ -421,14 +299,10 @@ else
 fi
 
 # 变量定义
-COWRIE_INSTALL_DIR="/opt/cowrie" # 定义安装目录
-
-# 定义获取 Python 版本的函数
-get_python_version() {
-  python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"
-}
-
-echo "开始安装 Cowrie..."
+COWRIE_INSTALL_DIR="/opt/cowrie"
+LOG_RETENTION_DAYS=30
+CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
+CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
 
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
@@ -447,11 +321,12 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 创建 Cowrie 用户
     echo "创建 Cowrie 用户..."
     if ! id cowrie &>/dev/null; then
-        useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {  
+        useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {  
             echo "创建 cowrie 用户失败"
             exit 1
-        } 
-    fi
+            } 
+       fi
+fi
 
     # 准备目录
     echo "准备安装目录..."
