@@ -3,6 +3,10 @@
 [English](./README_EN.md) | 简体中文
 
 一个综合性的网络安全防御系统，集成了蜜罐、入侵检测、安全加固等多重防护机制。
+移植自https://github.com/CurtisLu1/CyberSentry，修改仅生成密钥对（256位 ed25519）并增加fail2ban存在逻辑判断，
+发现不同vps因系统不同出现不同的bug，尝试使用AI进行测试修复
+由于vps及个人精力有限，未能全面测试，有其他bug也不会修！！！
+
 
 ## 核心功能
 
@@ -117,7 +121,7 @@ bash <(curl -sL https://raw.githubusercontent.com/coldrook/CyberSentry/refs/head
 - 密钥选项：
   - 保持现有密钥
   - 导入新公钥
-  - 生成新密钥对（4096位 RSA）
+  - 生成新密钥对（256位 ed25519）
 
 ### 防火墙设置
 - 自动配置 SSH 端口
