@@ -3,9 +3,10 @@
 [English](./README_EN.md) | 简体中文
 
 一个综合性的网络安全防御系统，集成了蜜罐、入侵检测、安全加固等多重防护机制。
-移植自https://github.com/CurtisLu1/CyberSentry
-修改仅生成密钥对（256位 ed25519）并增加fail2ban存在逻辑判断，
-发现不同vps因系统不同出现不同的bug，尝试使用AI进行测试修复
+不同vps因系统不同出现不同的bug，尝试使用AI进行测试修复并移植（https://github.com/CurtisLu1/CyberSentry）
+修改仅生成密钥对（256位 ed25519）
+并增加fail2ban存在逻辑判断
+同时对cowrie安装进行命令进行修改，仅符合个人使用习惯
 由于vps及个人精力有限，未能全面测试，有其他bug也不会修！！！
 
 
