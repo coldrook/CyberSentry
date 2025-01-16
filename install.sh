@@ -277,6 +277,11 @@ upgrade_python() {
     case "$os_id" in
         "debian")
             case "$os_version" in
+                "10")
+                    echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
+                    apt update
+                    apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv python3-pip
+                    ;;
                 "11"|"12")
                     sudo apt update
                     if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
@@ -675,7 +680,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 在 runuser 外部执行 sed 命令
     echo "配置 Cowrie 设置..."
-    sed -i "s/hostname = svr04/hostname = fake-ssh-server/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
+    sed -i "s/hostname = svr04/hostname = ubuntulatest-prod/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
     sed -i "s/^#listen_port=2222/listen_port=2222/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
     sed -i "s/^#download_limit_size=10485760/download_limit_size=1048576/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
 
