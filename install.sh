@@ -144,6 +144,37 @@ setup_ssh_key() {
     esac
 
     chmod 600 /root/.ssh/authorized_keys # 确保权限正确
+    echo "确保 authorized_keys 文件权限为 600."
+    
+    # 添加检查 authorized_keys 文件内容的逻辑
+    if [ -s /root/.ssh/authorized_keys ]; then
+        echo "authorized_keys 文件内容如下:"
+        cat /root/.ssh/authorized_keys
+    else
+        echo "authorized_keys 文件为空，请检查是否成功添加了公钥."
+    fi
+
+    # 检查 sshd 配置
+    echo "检查 sshd 配置..."
+    grep -E "^(PubkeyAuthentication|AuthorizedKeysFile)" /etc/ssh/sshd_config
+    
+    # 检查 SELinux 状态
+    if command -v sestatus >/dev/null 2>&1; then
+        echo "检查 SELinux 状态..."
+        sestatus
+    fi
+    
+    # 尝试重启 ssh 服务
+    echo "尝试重启 sshd 服务..."
+    if command -v systemctl >/dev/null 2>&1; then
+      sudo systemctl restart ssh
+    elif command -v service >/dev/null 2>&1; then
+      sudo service ssh restart
+    else
+      echo "无法找到 systemctl 或 service 命令，请手动重启 sshd 服务"
+    fi
+    
+    echo "请尝试使用密钥登录."
 }
 
 check_installed() {
