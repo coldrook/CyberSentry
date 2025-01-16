@@ -277,7 +277,7 @@ upgrade_python() {
     case "$os_id" in
         "debian")
             case "$os_version" in
-                "10"|"11"|"12")
+                "11"|"12")
                     sudo apt update
                     if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
                         sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
@@ -367,36 +367,57 @@ if ! python3 -c "import distutils" 2>/dev/null; then
     python3 -m ensurepip
 fi
 
-# Fail2ban 配置
-echo "检查 fail2ban 配置..."
-if ! check_installed "fail2ban" "systemctl is-active --quiet fail2ban"; then
+# 添加 fail2ban 配置函数
+configure_fail2ban() {
     echo "====开始配置 fail2ban===="
-
-    # 备份配置
-    echo "1. 备份 fail2ban 配置..."
+    
+    # 如果存在现有配置,显示配置摘要
     if [ -f /etc/fail2ban/jail.local ]; then
+        echo "当前 fail2ban 配置摘要:"
+        echo "------------------------"
+        grep -E "^(bantime|findtime|maxretry|action)" /etc/fail2ban/jail.local
+        echo "------------------------"
+    fi
+
+    # 备份现有配置
+    if [ -f /etc/fail2ban/jail.local ]; then
+        echo "1. 备份 fail2ban 配置..."
         backup_with_timestamp "/etc/fail2ban/jail.local" 3
     fi
 
-    # 写入新配置
+    # 检测系统并写入相应配置
     echo "2. 写入新配置..."
-    if ! cat > /etc/fail2ban/jail.local <<'EOF'
+    echo "新配置将包含:"
+    echo "- 禁止时长: 86400秒(24小时)"
+    echo "- 检测时间窗口: 1800秒(30分钟)"
+    echo "- 最大重试次数: 3次"
+    echo "- 启用 SSH 防护"
+
+    # 检测最佳后端
+    if [ -d /run/systemd/system ]; then
+        BACKEND="systemd"
+    else
+        BACKEND="auto"
+    fi
+    
+    if ! cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 ignoreip = 127.0.0.1/8 ::1
 bantime = 86400
-maxretry = 3
 findtime = 1800
+backend = $BACKEND  
 action = %(action_)s
 
 [sshd]
-backend=systemd
-enabled=true
-filter=sshd
+enabled = true
+port = ssh
+filter = sshd
 logpath = /var/log/auth.log
+maxretry = 3
 EOF
     then
         echo "错误：无法写入 fail2ban 配置文件"
-        exit 1
+        return 1
     fi
     echo "配置文件写入成功"
 
@@ -404,7 +425,7 @@ EOF
     echo "3. 测试配置文件..."
     if ! fail2ban-client -t; then
         echo "错误：fail2ban 配置测试失败"
-        exit 1
+        return 1
     fi
     echo "配置文件测试通过"
 
@@ -413,7 +434,7 @@ EOF
     if ! systemctl restart fail2ban; then
         echo "错误：fail2ban 服务重启失败"
         journalctl -u fail2ban --no-pager -n 50
-        exit 1
+        return 1
     fi
 
     # 检查服务状态
@@ -421,71 +442,134 @@ EOF
     if ! systemctl is-active --quiet fail2ban; then
         echo "错误：fail2ban 服务未能正常启动"
         systemctl status fail2ban
-        exit 1
+        return 1
     fi
 
     echo "====fail2ban 配置完成===="
-else
-    echo "fail2ban 已安装。"
-    read -r -p "是否覆盖现有配置？(y/N): " overwrite
-    if [[ "$overwrite" =~ ^([yY])+$ ]]; then
-        echo "====开始覆盖 fail2ban 配置===="
-        # 备份配置
-        echo "1. 备份 fail2ban 配置..."
-        if [ -f /etc/fail2ban/jail.local ]; then
-            backup_with_timestamp "/etc/fail2ban/jail.local" 3
-        fi
+    return 0
+}
 
-        # 写入新配置
-        echo "2. 写入新配置..."
-        if ! cat > /etc/fail2ban/jail.local <<'EOF'
-[DEFAULT]
-ignoreip = 127.0.0.1/8 ::1
-bantime = 86400
-maxretry = 3
-findtime = 1800
-action = %(action_)s
+install_fail2ban_deps() {
+    echo "安装fail2ban依赖..."
+    apt update
 
-[sshd]
-backend=systemd
-enabled=true
-filter=sshd
-logpath = /var/log/auth.log
-EOF
-        then
-            echo "错误：无法写入 fail2ban 配置文件"
-            exit 1
-        fi
-        echo "配置文件写入成功"
-
-        # 测试配置
-        echo "3. 测试配置文件..."
-        if ! fail2ban-client -t; then
-            echo "错误：fail2ban 配置测试失败"
-            exit 1
-        fi
-        echo "配置文件测试通过"
-
-        # 重启服务
-        echo "4. 重启 fail2ban 服务..."
-        if ! systemctl restart fail2ban; then
-            echo "错误：fail2ban 服务重启失败"
-            journalctl -u fail2ban --no-pager -n 50
-            exit 1
-        fi
-
-        # 检查服务状态
-        echo "5. 检查服务状态..."
-        if ! systemctl is-active --quiet fail2ban; then
-            echo "错误：fail2ban 服务未能正常启动"
-            systemctl status fail2ban
-            exit 1
-        fi
-        echo "====fail2ban 配置覆盖完成===="
-
-    else
-        echo "跳过配置覆盖。"
+    # 如果fail2ban服务在运行，先停止它
+    if systemctl is-active --quiet fail2ban; then
+        echo "停止fail2ban服务..."
+        systemctl stop fail2ban
+        systemctl disable fail2ban
     fi
+
+    # 检查并删除可能存在的运行时文件
+    if [ -f /var/run/fail2ban/fail2ban.pid ]; then
+        rm -f /var/run/fail2ban/fail2ban.pid
+    fi
+
+    # 备份配置文件
+    if [ -f /etc/fail2ban/jail.local ]; then
+        echo "备份现有配置..."
+        cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.backup
+    fi
+
+    # 完全移除现有fail2ban
+    echo "移除现有fail2ban..."
+    apt remove --purge -y python3-systemd fail2ban
+    apt autoremove -y
+
+    # 清理残留文件
+    rm -rf /var/lib/fail2ban
+    
+    # 安装构建依赖
+    apt install -y git python3-pip python3-dev build-essential pkg-config libsystemd-dev
+    
+    # 使用pip3安装systemd
+    pip3 install systemd-python || {
+        echo "systemd-python安装失败"
+        return 1
+    }
+
+    # 从GitHub克隆最新版本fail2ban
+    cd /tmp
+    git clone https://github.com/fail2ban/fail2ban.git
+    cd fail2ban
+    
+    # 安装fail2ban
+    python3 setup.py install || {
+        echo "fail2ban安装失败"
+        return 1
+    }
+    
+    # 创建必要的目录和文件
+    mkdir -p /etc/fail2ban
+    mkdir -p /var/run/fail2ban
+    
+    # 复制默认配置文件
+    cp /tmp/fail2ban/config/jail.conf /etc/fail2ban/jail.conf
+    cp /tmp/fail2ban/config/fail2ban.conf /etc/fail2ban/fail2ban.conf
+    
+    # 创建systemd服务文件
+    cat > /lib/systemd/system/fail2ban.service <<EOF
+[Unit]
+Description=Fail2Ban Service
+Documentation=man:fail2ban(1)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fail2ban-server -f -x -b start
+ExecStop=/usr/local/bin/fail2ban-client stop
+ExecReload=/usr/local/bin/fail2ban-client reload
+PIDFile=/var/run/fail2ban/fail2ban.pid
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # 重新加载systemd
+    systemctl daemon-reload
+    
+    # 清理临时文件
+    rm -rf /tmp/fail2ban
+    
+    return 0
+}
+
+# Fail2ban 安装和配置部分
+echo "检查 fail2ban 状态..."
+
+# 先检查是否已安装
+if ! command -v fail2ban-client &>/dev/null || \
+   ! python3 -c "import systemd.journal" 2>/dev/null; then
+    echo "fail2ban 或必要的 Python 模块未安装，开始安装..."
+    echo "fail2ban 未安装或缺少必要依赖，开始安装..."
+    install_fail2ban_deps || {
+        echo "fail2ban及其依赖安装失败"
+        exit 1
+    }
+fi
+
+# 检查服务状态并提供配置选项
+if systemctl is-active --quiet fail2ban; then
+    echo "fail2ban 服务正在运行"
+    if [ -f /etc/fail2ban/jail.local ]; then
+        echo "当前 fail2ban 配置摘要:"
+        echo "------------------------"
+        grep -E "^(bantime|findtime|maxretry|action)" /etc/fail2ban/jail.local || echo "未找到关键配置"
+        echo "------------------------"
+    else
+        echo "未检测到自定义配置文件"
+    fi
+    
+    read -r -p "是否重新配置 fail2ban？(y/N): " reconfigure
+    if [[ "$reconfigure" =~ ^([yY])+$ ]]; then
+        configure_fail2ban || exit 1
+    else
+        echo "保持当前配置"
+    fi
+else
+    echo "fail2ban 服务未运行，开始配置..."
+    configure_fail2ban || exit 1
 fi
 
 # 变量定义
