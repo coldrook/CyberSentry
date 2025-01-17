@@ -172,62 +172,6 @@ setup_ssh_key() {
         echo "authorized_keys 文件为空，请检查是否成功添加了公钥."
     fi
 
-    # 检查 sshd 配置
-    echo "检查 sshd 配置..."
-    grep -E "^(PubkeyAuthentication|AuthorizedKeysFile)" /etc/ssh/sshd_config
-    
-    # 检查 SELinux 状态
-    if command -v sestatus >/dev/null 2>&1; then
-        echo "检查 SELinux 状态..."
-        sestatus
-        # 添加 SELinux 相关处理
-        if sestatus | grep -q "SELinux status:                 enabled"; then
-            echo "SELinux 已启用，正在尝试更新 SSH 密钥的 SELinux 上下文..."
-            chcon -t ssh_home_t /root/.ssh/authorized_keys
-            if [ $? -ne 0 ]; then
-                echo "警告：更新 SELinux 上下文失败，请手动更新或禁用 SELinux。"
-            else
-                echo "SELinux 上下文已更新。"
-            fi
-        fi
-    fi
-    
-    # 测试 SSH 配置并重启服务
-    echo "测试 SSH 配置..."
-    if ! sshd -t; then
-        echo "SSH 配置测试失败，恢复默认配置"
-        mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-        
-        # 尝试重启 sshd 或 ssh 服务
-        if systemctl is-active sshd >/dev/null 2>&1; then
-            systemctl restart sshd
-        elif systemctl is-active ssh.service >/dev/null 2>&1; then
-            systemctl restart ssh.service
-        else
-            echo "无法找到 sshd 或 ssh 服务，请手动重启"
-        fi
-        exit 1
-    fi
-
-    echo "应用新的 SSH 配置..."
-    # 尝试重启 sshd 或 ssh 服务
-    if systemctl is-active sshd >/dev/null 2>&1; then
-        systemctl restart sshd
-        # 增加延时，确保服务完全重启
-        sleep 2
-        systemctl reload sshd
-    elif systemctl is-active ssh.service >/dev/null 2>&1; then
-        systemctl restart ssh.service
-        # 增加延时，确保服务完全重启
-        sleep 2
-        systemctl reload ssh.service
-    else
-        echo "无法找到 sshd 或 ssh 服务，请手动重启"
-    fi    
-    
-    echo "请尝试使用密钥登录."
-}
-
 check_installed() {
     local component="$1"
     local check_command="$2"
