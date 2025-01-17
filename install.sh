@@ -134,14 +134,8 @@ setup_ssh_key() {
             echo "正在将公钥添加到 authorized_keys..."
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
 
-            local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
-            echo "正在将私钥保存到临时文件: ${temp_key_file}"
-            cat "$ssh_key_file" > "$temp_key_file"
-            chmod 600 "$temp_key_file"
-            echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
-
-            # 添加删除临时文件的逻辑
-            trap 'rm -f "$temp_key_file"' EXIT
+            echo "SSH 密钥已生成，私钥保存在: $ssh_key_file"
+            chmod 600 "$ssh_key_file"
             ;;
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
@@ -186,6 +180,16 @@ setup_ssh_key() {
     if command -v sestatus >/dev/null 2>&1; then
         echo "检查 SELinux 状态..."
         sestatus
+        # 添加 SELinux 相关处理
+        if sestatus | grep -q "SELinux status:                 enabled"; then
+            echo "SELinux 已启用，正在尝试更新 SSH 密钥的 SELinux 上下文..."
+            chcon -t ssh_home_t /root/.ssh/authorized_keys
+            if [ $? -ne 0 ]; then
+                echo "警告：更新 SELinux 上下文失败，请手动更新或禁用 SELinux。"
+            else
+                echo "SELinux 上下文已更新。"
+            fi
+        fi
     fi
     
     # 测试 SSH 配置并重启服务
@@ -209,11 +213,13 @@ setup_ssh_key() {
     # 尝试重启 sshd 或 ssh 服务
     if systemctl is-active sshd >/dev/null 2>&1; then
         systemctl restart sshd
+        systemctl reload sshd
     elif systemctl is-active ssh.service >/dev/null 2>&1; then
         systemctl restart ssh.service
+        systemctl reload ssh.service
     else
         echo "无法找到 sshd 或 ssh 服务，请手动重启"
-    fi
+    fi    
     
     echo "请尝试使用密钥登录."
 }
@@ -808,9 +814,12 @@ systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
 
-# SSH 安全配置
-echo "检查 SSH 配置..."
-if [ -f "/root/.ssh/id_ed25519_256" ] && grep -q "^Port" /etc/ssh/sshd_config; then
+# 打印密匙警告信息函数
+print_warning() {
+  echo -e "\033[33m$1\033[0m"
+}
+
+if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
     if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
         echo "保持当前 SSH 配置"
