@@ -1015,7 +1015,7 @@ EOF
     fi
 
     echo "SSH 配置完成。"
-    fi
+fi
 
     # 防火墙配置
     setup_firewall() {
@@ -1123,7 +1123,6 @@ EOF
     [ "$AUTH_CHOICE" != "0" ] && echo "- SSH 认证配置已更新"
     [ "$SETUP_UFW" = "y" ] && echo "- 防火墙规则已更新"
     echo "=========================="
-fi
 
 # 检查服务状态
 echo "检查服务状态..."
