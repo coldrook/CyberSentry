@@ -1101,13 +1101,28 @@ EOF
     fi
 
     if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
+        # 尝试使用 killall 强制重启 sshd 进程
+        if pgrep -x "$SSH_SERVICE" > /dev/null; then
+            echo "尝试使用 killall 强制重启 $SSH_SERVICE 进程..."
+            killall -9 "$SSH_SERVICE"
+            sleep 2 # 等待进程完全停止
+        fi
+        
         systemctl restart "$SSH_SERVICE"
+        
+        # 强制 SSH 服务重新加载配置
+        sleep 2 # 等待服务完全重启
+        if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
+          echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
+          systemctl restart "$SSH_SERVICE"
+        else
+          echo "SSH 服务已重新加载配置。"
+        fi
     fi
 
     echo "SSH 配置状态："
     [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] && echo "- SSH 端口已更改为: ${NEW_SSH_PORT}"
     [ "$AUTH_CHOICE" != "0" ] && echo "- SSH 认证配置已更新"
-    [ "$SETUP_UFW" = "y" ] && echo "- 防火墙规则已更新"
     echo "=========================="
 fi
 
