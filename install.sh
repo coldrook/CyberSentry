@@ -1001,21 +1001,6 @@ EOF
             echo "无效的选择！保持当前认证配置"
             ;;
     esac
-    
-    # 修改 SSH 端口
-    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
-        echo "修改 SSH 端口为：$NEW_SSH_PORT"
-        sed -i "s/^#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
-        if ! grep -q "^Port $NEW_SSH_PORT" /etc/ssh/sshd_config; then
-            echo "添加端口配置：Port $NEW_SSH_PORT"
-            echo "Port $NEW_SSH_PORT" >> /etc/ssh/sshd_config
-        fi
-        systemctl restart "$SSH_SERVICE"
-        echo "SSH 端口已更新为 $NEW_SSH_PORT"
-    fi
-
-    echo "SSH 配置完成。"
-fi
 
     # 防火墙配置
     setup_firewall() {
@@ -1123,6 +1108,7 @@ fi
     [ "$AUTH_CHOICE" != "0" ] && echo "- SSH 认证配置已更新"
     [ "$SETUP_UFW" = "y" ] && echo "- 防火墙规则已更新"
     echo "=========================="
+fi
 
 # 检查服务状态
 echo "检查服务状态..."
