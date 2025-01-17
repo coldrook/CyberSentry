@@ -85,10 +85,26 @@ write_config() {
 }
 
 # sshd&ssh兼容选择
-SSH_SERVICE=$(if systemctl is-active sshd > /dev/null 2>&1; then echo "sshd"; elif systemctl is-active ssh > /dev/null 2>&1; then echo "ssh"; else echo ""; fi)
+SSH_SERVICE=""
+
+if systemctl is-active sshd > /dev/null 2>&1; then
+  SSH_SERVICE="sshd"
+elif systemctl is-active ssh > /dev/null 2>&1; then
+  SSH_SERVICE="ssh"
+fi
+
 if [ -z "$SSH_SERVICE" ]; then
-  echo "错误：未找到 SSH 服务 (sshd 或 ssh)。请确保 SSH 服务已安装。"
-  exit 1
+    if systemctl is-enabled sshd > /dev/null 2>&1; then
+      echo "错误：sshd 服务已启用但未运行。请启动 sshd 服务。"
+    elif systemctl is-enabled ssh > /dev/null 2>&1; then
+      echo "错误：ssh 服务已启用但未运行。请检查 ssh 服务配置。"
+    else
+      echo "错误：未找到可用的 SSH 服务 (sshd 或 ssh)。请确保 SSH 服务已安装并启用。"
+    fi
+    exit 1
+else
+  echo "成功：检测到 SSH 服务: $SSH_SERVICE"
+  # 在这里可以添加后续操作，例如使用 $SSH_SERVICE 变量
 fi
 
 # 密钥处理函数
