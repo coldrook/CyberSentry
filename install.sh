@@ -1015,7 +1015,7 @@ EOF
     fi
 
     echo "SSH 配置完成。"
-fi
+    fi
 
     # 防火墙配置
     setup_firewall() {
@@ -1115,7 +1115,7 @@ fi
     fi
 
     if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
-        systemctl restart ssh
+        systemctl restart "$SSH_SERVICE"
     fi
 
     echo "SSH 配置状态："
