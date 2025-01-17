@@ -955,6 +955,15 @@ EOF
             echo "应用新的 SSH 配置..."
             systemctl restart "$SSH_SERVICE"
 
+            # 强制 SSH 服务重新加载配置
+            sleep 2 # 等待服务完全重启
+            if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
+              echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
+              systemctl restart "$SSH_SERVICE"
+            else
+              echo "SSH 服务已重新加载配置。"
+            fi
+
             # 验证配置
             echo "验证 SSH 配置..."
             if grep -q "^PasswordAuthentication yes" /etc/ssh/sshd_config || \
