@@ -161,16 +161,6 @@ setup_ssh_key() {
     else
         echo "authorized_keys 文件为空，请检查是否成功添加了公钥."
     fi
-
-    # 检查 sshd 配置
-    echo "检查 sshd 配置..."
-    grep -E "^(PubkeyAuthentication|AuthorizedKeysFile)" /etc/ssh/sshd_config
-    
-    # 检查 SELinux 状态
-    if command -v sestatus >/dev/null 2>&1; then
-        echo "检查 SELinux 状态..."
-        sestatus
-    fi
     
     # 测试 SSH 配置并重启服务
     echo "测试 SSH 配置..."
