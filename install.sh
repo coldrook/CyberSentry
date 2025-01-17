@@ -84,6 +84,14 @@ write_config() {
     cat > "$file"
 }
 
+# sshd&ssh兼容选择
+SSH_SERVICE=$(if systemctl is-active sshd > /dev/null 2>&1; then echo "sshd"; elif systemctl is-active ssh > /dev/null 2>&1; then echo "ssh"; else echo ""; fi)
+if [ -z "$SSH_SERVICE" ]; then
+  echo "错误：未找到 SSH 服务 (sshd 或 ssh)。请确保 SSH 服务已安装。"
+  exit 1
+fi
+
+# 密钥处理函数
 setup_ssh_key() {
     local key_type="$1"
     mkdir -p /root/.ssh
@@ -164,14 +172,31 @@ setup_ssh_key() {
         sestatus
     fi
     
-    # 尝试重启 ssh 服务
-    echo "尝试重启 sshd 服务..."
-    if command -v systemctl >/dev/null 2>&1; then
-      sudo systemctl restart ssh
-    elif command -v service >/dev/null 2>&1; then
-      sudo service ssh restart
+    # 测试 SSH 配置并重启服务
+    echo "测试 SSH 配置..."
+    if ! sshd -t; then
+        echo "SSH 配置测试失败，恢复默认配置"
+        mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
+        
+        # 尝试重启 sshd 或 ssh 服务
+        if systemctl is-active sshd >/dev/null 2>&1; then
+            systemctl restart sshd
+        elif systemctl is-active ssh.service >/dev/null 2>&1; then
+            systemctl restart ssh.service
+        else
+            echo "无法找到 sshd 或 ssh 服务，请手动重启"
+        fi
+        exit 1
+    fi
+
+    echo "应用新的 SSH 配置..."
+    # 尝试重启 sshd 或 ssh 服务
+    if systemctl is-active sshd >/dev/null 2>&1; then
+        systemctl restart sshd
+    elif systemctl is-active ssh.service >/dev/null 2>&1; then
+        systemctl restart ssh.service
     else
-      echo "无法找到 systemctl 或 service 命令，请手动重启 sshd 服务"
+        echo "无法找到 sshd 或 ssh 服务，请手动重启"
     fi
     
     echo "请尝试使用密钥登录."
@@ -769,7 +794,7 @@ systemctl start cowrie # 使用 start 而不是 restart
 
 # SSH 安全配置
 echo "检查 SSH 配置..."
-if [ -f "/root/.ssh/id_rsa" ] && grep -q "^Port" /etc/ssh/sshd_config; then
+if [ -f "/root/.ssh/id_ed25519_256" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
     if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
         echo "保持当前 SSH 配置"
@@ -907,13 +932,20 @@ EOF
             echo "测试 SSH 配置..."
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复默认配置"
-                mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                systemctl restart ssh
+                # 找到最新的备份文件
+                LATEST_BACKUP=$(find . -maxdepth 1 -name "sshd_config.bak.*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d' ' -f 2-)
+                if [ -n "$LATEST_BACKUP" ]; then
+                    mv "$LATEST_BACKUP" /etc/ssh/sshd_config
+                else
+                    echo "错误：未找到备份文件，无法恢复"
+                    exit 1
+                fi
+                systemctl restart "$SSH_SERVICE"
                 exit 1
             fi
 
             echo "应用新的 SSH 配置..."
-            systemctl restart ssh
+            systemctl restart "$SSH_SERVICE"
 
             # 验证配置
             echo "验证 SSH 配置..."
@@ -928,8 +960,15 @@ EOF
                 read -r CONTINUE
                 if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
                     echo "恢复原始配置..."
-                    mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                    systemctl restart ssh  
+                    # 找到最新的备份文件
+                    LATEST_BACKUP=$(find . -maxdepth 1 -name "sshd_config.bak.*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d' ' -f 2-)
+                    if [ -n "$LATEST_BACKUP" ]; then
+                        mv "$LATEST_BACKUP" /etc/ssh/sshd_config
+                    else
+                        echo "错误：未找到备份文件，无法恢复"
+                        exit 1
+                    fi
+                    systemctl restart "$SSH_SERVICE"
                     exit 1
                 fi
             fi
@@ -946,6 +985,21 @@ EOF
             echo "无效的选择！保持当前认证配置"
             ;;
     esac
+    
+    # 修改 SSH 端口
+    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
+        echo "修改 SSH 端口为：$NEW_SSH_PORT"
+        sed -i "s/^#Port 22/Port $NEW_SSH_PORT/" /etc/ssh/sshd_config
+        if ! grep -q "^Port $NEW_SSH_PORT" /etc/ssh/sshd_config; then
+            echo "添加端口配置：Port $NEW_SSH_PORT"
+            echo "Port $NEW_SSH_PORT" >> /etc/ssh/sshd_config
+        fi
+        systemctl restart "$SSH_SERVICE"
+        echo "SSH 端口已更新为 $NEW_SSH_PORT"
+    fi
+
+    echo "SSH 配置完成。"
+fi
 
     # 防火墙配置
     setup_firewall() {
