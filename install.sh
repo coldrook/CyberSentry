@@ -317,17 +317,6 @@ EOF
 echo "检查系统软件源..."
 update_sources
 
-# 添加在环境检查部分之前
-echo "设置系统时区为台北..."
-if [ -f /usr/share/zoneinfo/Asia/Taipei ]; then
-    ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime
-    echo "Asia/Taipei" > /etc/timezone
-    dpkg-reconfigure -f noninteractive tzdata
-    echo "时区已设置为台北"
-else
-    echo "警告：无法找到台北时区文件"
-fi
-
 # 添加 Python 版本检测函数
 check_python_version() {
     local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
