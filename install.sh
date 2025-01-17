@@ -134,8 +134,14 @@ setup_ssh_key() {
             echo "正在将公钥添加到 authorized_keys..."
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
 
-            echo "SSH 密钥已生成，私钥保存在: $ssh_key_file"
-            chmod 600 "$ssh_key_file"
+            local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
+            echo "正在将私钥保存到临时文件: ${temp_key_file}"
+            cat "$ssh_key_file" > "$temp_key_file"
+            chmod 600 "$temp_key_file"
+            echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
+
+            # 添加删除临时文件的逻辑
+            trap 'rm -f "$temp_key_file"' EXIT
             ;;
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
@@ -162,15 +168,7 @@ setup_ssh_key() {
     esac
 
     chmod 600 /root/.ssh/authorized_keys # 确保权限正确
-    echo "确保 authorized_keys 文件权限为 600."
-    
-    # 添加检查 authorized_keys 文件内容的逻辑
-    if [ -s /root/.ssh/authorized_keys ]; then
-        echo "authorized_keys 文件内容如下:"
-        cat /root/.ssh/authorized_keys
-    else
-        echo "authorized_keys 文件为空，请检查是否成功添加了公钥."
-    fi
+}
 
 check_installed() {
     local component="$1"
