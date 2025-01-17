@@ -213,9 +213,13 @@ setup_ssh_key() {
     # 尝试重启 sshd 或 ssh 服务
     if systemctl is-active sshd >/dev/null 2>&1; then
         systemctl restart sshd
+        # 增加延时，确保服务完全重启
+        sleep 2
         systemctl reload sshd
     elif systemctl is-active ssh.service >/dev/null 2>&1; then
         systemctl restart ssh.service
+        # 增加延时，确保服务完全重启
+        sleep 2
         systemctl reload ssh.service
     else
         echo "无法找到 sshd 或 ssh 服务，请手动重启"
@@ -235,28 +239,18 @@ check_installed() {
     return 1
 }
 
-# 修改防火墙规则检查函数
+# 防火墙规则检查函数
 check_ufw_rule() {
     local port="$1"
     local comment="$2"
-    
-    # 检查所有可能的规则格式（包括带注释和不带注释的）
-    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
-        # 如果指定了注释，检查是否有带注释的规则
-        if [ -n "$comment" ]; then
-            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
-                echo "端口 $port 已配置 ($comment)"
-                return 0
-            fi
-            # 存在端口但没有指定注释
-            echo "端口 $port 已存在其他规则"
-            return 2
-        else
-            echo "端口 $port 已配置"
-            return 0
-        fi
+    ufw status | grep -q " $port\/tcp.*$comment"
+    if [ $? -eq 0 ]; then
+        return 0 # 规则存在
+    elif ufw status | grep -q " $port\/tcp"; then
+        return 2 # 端口存在，但注释不匹配
+    else
+        return 1 # 规则不存在
     fi
-    return 1
 }
 
 # 在函数定义部分添加备份管理函数
