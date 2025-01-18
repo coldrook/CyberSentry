@@ -63,43 +63,6 @@ check_command() {
     }
 }
 
-# 状态文件
-STATE_FILE="/tmp/backtrance_install_state.txt"
-
-# 定义一个函数来保存当前脚本执行的状态和数据
-save_state() {
-    local state="$1"
-    local data="$2"
-    echo "保存状态: $state, 数据: $data"
-    echo "$state" > "$STATE_FILE"
-    if [ -n "$data" ]; then
-        echo "$data" >> "$STATE_FILE"
-    fi
-}
-
-# 定义一个函数来读取上次的执行状态和数据
-load_state() {
-    if [ -f "$STATE_FILE" ]; then
-        read -r STATE < "$STATE_FILE"
-        if read -r DATA < "$STATE_FILE"; then
-            echo "读取状态: $STATE, 数据: $DATA"
-            echo "$STATE" "$DATA"
-        else
-            echo "读取状态: $STATE, 无数据"
-            echo "$STATE"
-        fi
-    else
-        echo "读取状态: start, 无状态文件"
-        echo "start"
-    fi
-}
-
-# 定义一个函数来删除状态文件
-clear_state() {
-  echo "删除状态文件: $STATE_FILE"
-  rm -f "$STATE_FILE"
-}
-
 backup_config() {
     local config_file="$1"
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
@@ -222,21 +185,6 @@ setup_ssh_key() {
 
     chmod 600 /root/.ssh/authorized_keys # 确保权限正确
 }
-
-# 获取上次执行状态
-load_state_result=$(load_state)
-STATE=$(echo "$load_state_result" | awk '{print $1}')
-SAVED_SSH_PORT=$(echo "$load_state_result" | awk '{print $2}')
-
-# 检查是否已配置
-SSH_CONFIGURED=false
-if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
-    read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
-    if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
-        echo "保持当前 SSH 配置"
-        SSH_CONFIGURED=true
-    fi
-fi
 
 check_installed() {
     local component="$1"
@@ -808,6 +756,58 @@ systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
 
 echo "Cowrie 服务配置完成。"
+
+# 状态文件
+STATE_FILE="/tmp/backtrance_install_state.txt"
+
+# 定义一个函数来保存当前脚本执行的状态和数据
+save_state() {
+    local state="$1"
+    local data="$2"
+    echo "保存状态: $state, 数据: $data"
+    echo "$state" > "$STATE_FILE"
+    if [ -n "$data" ]; then
+        echo "$data" >> "$STATE_FILE"
+    fi
+}
+
+# 定义一个函数来读取上次的执行状态和数据
+load_state() {
+    if [ -f "$STATE_FILE" ]; then
+        read -r STATE < "$STATE_FILE"
+        if read -r DATA < "$STATE_FILE"; then
+            echo "读取状态: $STATE, 数据: $DATA"
+            echo "$STATE" "$DATA"
+        else
+            echo "读取状态: $STATE, 无数据"
+            echo "$STATE"
+        fi
+    else
+        echo "读取状态: start, 无状态文件"
+        echo "start"
+    fi
+}
+
+# 定义一个函数来删除状态文件
+clear_state() {
+  echo "删除状态文件: $STATE_FILE"
+  rm -f "$STATE_FILE"
+}
+
+# 获取上次执行状态
+load_state_result=$(load_state)
+STATE=$(echo "$load_state_result" | awk '{print $1}')
+SAVED_SSH_PORT=$(echo "$load_state_result" | awk '{print $2}')
+
+# 检查是否已配置
+SSH_CONFIGURED=false
+if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
+    read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
+    if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
+        echo "保持当前 SSH 配置"
+        SSH_CONFIGURED=true
+    fi
+fi
 
 # 脚本开始
 if [ "$STATE" = "start" ]; then
