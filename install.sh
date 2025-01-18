@@ -703,6 +703,15 @@ if [ "$SSH_CONFIGURED" != "true" ]; then
             ;;
     esac
 
+    # 更新 SSH 配置文件
+    sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
+
+    # 重新启动 SSH 服务
+    echo "重新启动 SSH 服务..."
+    systemctl restart ssh
+
+    echo "SSH 服务已重新启动，使用新的端口: ${NEW_SSH_PORT}"
+
     # SSH 认证配置
     echo "SSH 认证配置："
     echo "0) 保持当前配置"
