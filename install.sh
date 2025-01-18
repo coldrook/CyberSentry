@@ -20,12 +20,6 @@ apt update || {
     exit 1
 }
 
-echo "版本内升级系统"
-apt upgrade --only-upgrade || {
-    echo "apt upgrade 失败"
-    exit 1
-}
-
 # 安装 net-tools
 echo "安装 net-tools..."
 apt install -y net-tools || {
