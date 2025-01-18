@@ -20,6 +20,13 @@ apt update && apt upgrade --only-upgrade || {
     exit 1
 }
 
+# 安装 command-not-found
+echo "安装 command-not-found..."
+apt install -y command-not-found || {
+    echo "command-not-found 安装失败"
+    exit 1
+}
+
 # 安装 net-tools
 echo "安装 net-tools..."
 apt install -y net-tools || {
