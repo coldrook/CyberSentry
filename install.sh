@@ -65,18 +65,28 @@ check_command() {
 
 # 状态文件
 STATE_FILE="/tmp/backtrance_install_state.txt"
-# 定义一个函数来保存当前脚本执行的状态
+
+# 定义一个函数来保存当前脚本执行的状态和数据
 save_state() {
-    echo "$1" > "$STATE_FILE"
+    local state="$1"
+    local data="$2"
+    echo "$state" > "$STATE_FILE"
+    if [ -n "$data" ]; then
+        echo "$data" >> "$STATE_FILE"
+    fi
 }
 
-# 定义一个函数来读取上次的执行状态
+# 定义一个函数来读取上次的执行状态和数据
 load_state() {
     if [ -f "$STATE_FILE" ]; then
         read -r STATE < "$STATE_FILE"
-        echo "$STATE"
+        if read -r DATA < "$STATE_FILE"; then
+            echo "$STATE" "$DATA"
+        else
+            echo "$STATE"
+        fi
     else
-        echo "start" # 默认状态
+        echo "start"
     fi
 }
 
@@ -207,6 +217,21 @@ setup_ssh_key() {
 
     chmod 600 /root/.ssh/authorized_keys # 确保权限正确
 }
+
+# 获取上次执行状态
+load_state_result=$(load_state)
+STATE=$(echo "$load_state_result" | awk '{print $1}')
+SAVED_SSH_PORT=$(echo "$load_state_result" | awk '{print $2}')
+
+# 检查是否已配置
+SSH_CONFIGURED=false
+if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
+    read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
+    if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
+        echo "保持当前 SSH 配置"
+        SSH_CONFIGURED=true
+    fi
+fi
 
 check_installed() {
     local component="$1"
@@ -777,19 +802,6 @@ systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
 
-# 获取上次执行状态
-STATE=$(load_state)
-
-# 检查是否已配置
-SSH_CONFIGURED=false
-if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
-    read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
-    if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
-        echo "保持当前 SSH 配置"
-        SSH_CONFIGURED=true
-    fi
-fi
-
 # 脚本开始
 if [ "$STATE" = "start" ]; then
     save_state "ssh_config"
@@ -1029,6 +1041,15 @@ EOF
 fi
 
 if [ "$STATE" = "firewall_config" ]; then
+    # 如果状态文件中没有保存端口，则使用默认端口
+    if [ -z "$SAVED_SSH_PORT" ]; then
+        NEW_SSH_PORT="22"
+        echo "警告：未找到保存的 SSH 端口，使用默认端口 22"
+    else
+        NEW_SSH_PORT="$SAVED_SSH_PORT"
+        echo "使用保存的 SSH 端口: $NEW_SSH_PORT"
+    fi
+    
     # 防火墙配置
     setup_firewall() {
         echo "开始设置防火墙规则..."
@@ -1155,6 +1176,15 @@ if [ "$STATE" = "firewall_config" ]; then
 fi
 
 if [ "$STATE" = "service_check" ]; then
+    # 如果状态文件中没有保存端口，则使用默认端口
+    if [ -z "$SAVED_SSH_PORT" ]; then
+        NEW_SSH_PORT="22"
+        echo "警告：未找到保存的 SSH 端口，使用默认端口 22"
+    else
+        NEW_SSH_PORT="$SAVED_SSH_PORT"
+        echo "使用保存的 SSH 端口: $NEW_SSH_PORT"
+    fi
+    
     # 检查服务状态
     echo "检查服务状态..."
     SERVICE_CHECK_FAILED=false
@@ -1234,7 +1264,7 @@ if [ "$STATE" = "final_report" ]; then
         echo "${port:-22}"
     }
 
-# 最终配置总结
+    # 最终配置总结
     clear
     print_header "Backtrance 安装完成"
     echo "安装时间: $(date '+%Y-%m-%d %H:%M:%S')"
