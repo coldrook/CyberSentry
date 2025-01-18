@@ -52,8 +52,8 @@ setup_ssh_key() {
     
     case $key_type in
         "generate")
-            local ssh_key_file="/root/.ssh/id_rsa"
-            ssh-keygen -t rsa -b 4096 -f "$ssh_key_file" -N ""
+            local ssh_key_file="/root/.ssh/id_ed25519"
+            ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
             cat "$ssh_key_file" > "$temp_key_file"
@@ -62,7 +62,7 @@ setup_ssh_key() {
             ;;
         "import")
             read -r -p "请输入 SSH 公钥: " pubkey
-            [[ $pubkey == ssh-rsa* ]] || {
+            [[ $pubkey == ssh-ed25519* ]] || {
                 echo "错误：无效的公钥格式"
                 return 1
             }
