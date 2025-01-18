@@ -1153,10 +1153,28 @@ print_header "SSH 配置信息"
 FINAL_SSH_PORT=$(get_current_ssh_port)
 echo "当前 SSH 配置："
 print_info "端口: $FINAL_SSH_PORT"
-print_info "密码认证: $(grep "^PasswordAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")"
-print_info "密钥认证: $(grep "^PubkeyAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")"
+print_info "密码认证: $(grep "^PasswordAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")" 
+check_pubkey_auth() {
+    # 1. 首先检查未注释的配置
+    local value=$(grep -E "^[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    
+    # 2. 如果没找到,检查注释的配置
+    if [ -z "$value" ]; then
+        value=$(grep -E "^#[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    fi
+    
+    # 3. 如果还是没找到,返回默认值
+    echo "${value:-yes}"
+}
+
+print_info "密钥认证: $(check_pubkey_auth)"
+# Check both root and original user's SSH keys
+ORIGINAL_USER=$(who am i | awk '{print $1}')
 if [ -f "/root/.ssh/authorized_keys" ]; then
-    print_info "已配置公钥数量: $(grep -c "^ssh-" /root/.ssh/authorized_keys)"
+    print_info "root用户已配置公钥数量: $(grep -c "^ssh-" /root/.ssh/authorized_keys)"
+fi
+if [ -n "$ORIGINAL_USER" ] && [ -f "/home/$ORIGINAL_USER/.ssh/authorized_keys" ]; then
+    print_info "$ORIGINAL_USER用户已配置公钥数量: $(grep -c "^ssh-" /home/$ORIGINAL_USER/.ssh/authorized_keys)"
 fi
 [ -n "$TEMP_KEY_FILE" ] && print_info "新生成的私钥位置: $TEMP_KEY_FILE"
 
