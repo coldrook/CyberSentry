@@ -89,13 +89,18 @@ echo "检查 SSH 配置..."
 
 # 密钥处理函数
 setup_ssh_key() {
+    set -e # Exit immediately if a command fails
     local key_type="$1"
-    mkdir -p /root/.ssh
-    chmod 700 /root/.ssh
+    local ssh_dir="/root/.ssh"
+    local authorized_keys_file="$ssh_dir/authorized_keys"
+
+    # Ensure .ssh directory exists and has correct permissions
+    mkdir -p "$ssh_dir"
+    chmod 700 "$ssh_dir"
 
     case $key_type in
         "generate")
-            local ssh_key_file="/root/.ssh/id_ed25519_256"
+            local ssh_key_file="/root/.ssh/id_ed25519"
             echo "正在尝试生成 SSH 密钥..."
             if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""; then
                 echo "错误：SSH 密钥生成失败，返回码: $?"
@@ -105,32 +110,27 @@ setup_ssh_key() {
             fi
 
             # 确保 authorized_keys 文件存在并设置权限
-            if [ ! -f /root/.ssh/authorized_keys ]; then
+            if [ ! -f "$authorized_keys_file" ]; then
                 echo "authorized_keys 文件不存在，正在创建..."
-                touch /root/.ssh/authorized_keys
-                chmod 600 /root/.ssh/authorized_keys
+                touch "$authorized_keys_file"
+                chmod 600 "$authorized_keys_file"
             fi
 
-            echo "正在将公钥添加到 authorized_keys..."
-            if ! cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys; then
-                echo "错误：添加公钥到 authorized_keys 失败"
-                return 1
+            # Check if the public key already exists in authorized_keys
+            if grep -q "$(cat "${ssh_key_file}.pub")" "$authorized_keys_file"; then
+              echo "公钥已存在于 authorized_keys 中，跳过添加。"
             else
-                echo "公钥已添加到 authorized_keys"
+                echo "正在将公钥添加到 authorized_keys..."
+                if ! cat "${ssh_key_file}.pub" >> "$authorized_keys_file"; then
+                    echo "错误：添加公钥到 authorized_keys 失败, 返回码: $?"
+                    return 1
+                else
+                   echo "公钥已添加到 authorized_keys"
+                fi
             fi
 
-            local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
-            echo "正在将私钥保存到临时文件: ${temp_key_file}"
-            if ! cat "$ssh_key_file" > "$temp_key_file"; then
-                echo "错误：保存私钥到临时文件失败"
-                return 1
-            else
-                chmod 600 "$temp_key_file"
-                echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
-            fi
-
-            # 添加删除临时文件的逻辑
-            trap 'rm -f "$temp_key_file"' EXIT
+            echo "SSH 密钥已生成，私钥输出到标准输出，请妥善保存."
+            cat "$ssh_key_file"
             ;;
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
@@ -140,18 +140,23 @@ setup_ssh_key() {
                 return 1
             fi
 
-            # 确保 authorized_keys 文件存在并设置权限
-            if [ ! -f /root/.ssh/authorized_keys ]; then
-                touch /root/.ssh/authorized_keys
-                chmod 600 /root/.ssh/authorized_keys
+            # Ensure authorized_keys file exists and set permissions
+            if [ ! -f "$authorized_keys_file" ]; then
+                touch "$authorized_keys_file"
+                chmod 600 "$authorized_keys_file"
             fi
 
-            echo "正在将公钥添加到 authorized_keys..."
-            if ! echo "$pubkey" >> /root/.ssh/authorized_keys; then
-                echo "错误：添加公钥到 authorized_keys 失败"
-                return 1
+            # Check if the public key already exists in authorized_keys
+            if grep -q "$pubkey" "$authorized_keys_file"; then
+              echo "公钥已存在于 authorized_keys 中，跳过添加。"
             else
-                echo "公钥已添加"
+                echo "正在将公钥添加到 authorized_keys..."
+                if ! echo "$pubkey" >> "$authorized_keys_file"; then
+                    echo "错误：添加公钥到 authorized_keys 失败, 返回码: $?"
+                    return 1
+                else
+                  echo "公钥已添加"
+                fi
             fi
             ;;
         *)
@@ -160,7 +165,7 @@ setup_ssh_key() {
             ;;
     esac
 
-    chmod 600 /root/.ssh/authorized_keys # 确保权限正确
+    chmod 600 "$authorized_keys_file" # Ensure permissions are correct
 }
 
 check_installed() {
