@@ -70,6 +70,7 @@ STATE_FILE="/tmp/backtrance_install_state.txt"
 save_state() {
     local state="$1"
     local data="$2"
+    echo "保存状态: $state, 数据: $data"
     echo "$state" > "$STATE_FILE"
     if [ -n "$data" ]; then
         echo "$data" >> "$STATE_FILE"
@@ -81,17 +82,21 @@ load_state() {
     if [ -f "$STATE_FILE" ]; then
         read -r STATE < "$STATE_FILE"
         if read -r DATA < "$STATE_FILE"; then
+            echo "读取状态: $STATE, 数据: $DATA"
             echo "$STATE" "$DATA"
         else
+            echo "读取状态: $STATE, 无数据"
             echo "$STATE"
         fi
     else
+        echo "读取状态: start, 无状态文件"
         echo "start"
     fi
 }
 
 # 定义一个函数来删除状态文件
 clear_state() {
+  echo "删除状态文件: $STATE_FILE"
   rm -f "$STATE_FILE"
 }
 
@@ -1366,4 +1371,3 @@ if [ "$STATE" = "final_report" ]; then
     echo -e "\n\033[1;32m安装完成！如需帮助，请访问项目主页。\033[0m\n"
     
     clear_state # 清除状态文件
-fi
