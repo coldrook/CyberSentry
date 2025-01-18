@@ -1371,3 +1371,4 @@ if [ "$STATE" = "final_report" ]; then
     echo -e "\n\033[1;32m安装完成！如需帮助，请访问项目主页。\033[0m\n"
     
     clear_state # 清除状态文件
+fi
