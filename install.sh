@@ -68,29 +68,6 @@ backup_config() {
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
 }
 
-# 美化输出函数
-print_header() {
-    echo -e "\n\033[1;34m========================================\033[0m"
-    echo -e "\033[1;34m$1\033[0m"
-    echo -e "\033[1;34m========================================\033[0m"
-}
-
-print_info() {
-    echo -e "\033[1;37m$1\033[0m"
-}
-
-print_success() {
-    echo -e "\033[1;32m$1\033[0m"
-}
-
-print_warning() {
-    echo -e "\033[1;33m$1\033[0m"
-}
-
-print_error() {
-    echo -e "\033[1;31m$1\033[0m"
-}
-
 # 添加 Python 版本检测函数（在函数定义部分）
 get_python_version() {
     python3 --version 2>&1 | awk '{print $2}'
@@ -755,8 +732,6 @@ systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
 
-echo "Cowrie 服务配置完成。"
-
 # 状态文件
 STATE_FILE="/tmp/backtrance_install_state.txt"
 
@@ -809,6 +784,28 @@ if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     fi
 fi
 
+# 美化输出函数
+print_header() {
+    echo -e "\n\033[1;34m========================================\033[0m"
+    echo -e "\033[1;34m$1\033[0m"
+    echo -e "\033[1;34m========================================\033[0m"
+}
+
+print_info() {
+    echo -e "\033[1;37m$1\033[0m"
+}
+
+print_success() {
+    echo -e "\033[1;32m$1\033[0m"
+}
+
+print_warning() {
+    echo -e "\033[1;33m$1\033[0m"
+}
+
+print_error() {
+    echo -e "\033[1;31m$1\033[0m"
+}
 # 脚本开始
 if [ "$STATE" = "start" ]; then
     save_state "ssh_config"
