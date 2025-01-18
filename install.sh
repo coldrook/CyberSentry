@@ -232,6 +232,12 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
+    local python_version="3.9" # Default to 3.11, can be changed
+    local python_pkg="python${python_version}"
+    local python_dev_pkg="python${python_version}-dev"
+    local python_venv_pkg="python${python_version}-venv"
+
+    echo "开始升级 Python 到 ${python_version}..."
     
     case "$os_id" in
         "debian")
@@ -242,19 +248,46 @@ upgrade_python() {
                     apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv
                     ;;
                 "11"|"12")
-                    apt update
-                    apt install -y python3.9 python3.9-dev python3.9-venv
+                    sudo apt update
+                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
+                        echo "成功将 Python 升级到 ${python_version}。"
+                    else
+                        echo "升级 Python 到 ${python_version} 失败。"
+                        return 1
+                    fi
+                    ;;
+                *)
+                    echo "不支持的 Debian 版本: ${os_version}"
+                    return 1
                     ;;
             esac
             ;;
         "ubuntu")
-            add-apt-repository -y ppa:deadsnakes/ppa
-            apt update
-            apt install -y python3.9 python3.9-dev python3.9-venv
+            case "$os_version" in
+                "20.04"|"22.04"|"24.04")
+                    sudo apt install -y software-properties-common
+                    sudo add-apt-repository ppa:deadsnakes/ppa -y
+                    sudo apt update
+                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
+                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
+                        echo "成功将 Python 升级到 ${python_version}。"
+                    else
+                        echo "升级 Python 到 ${python_version} 失败。"
+                        return 1
+                    fi
+                    ;;
+                *)
+                    echo "不支持的 Ubuntu 版本: ${os_version}"
+                    return 1
+                    ;;
+            esac
+            ;;
+        *)
+            echo "不支持的操作系统: ${os_id}"
+            return 1
             ;;
     esac
-    
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 }
 
 # 添加 Python 依赖修复函数
