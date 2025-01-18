@@ -27,6 +27,27 @@ apt install -y net-tools || {
     exit 1
 }
 
+# 安装 cron
+echo "安装 cron..."
+apt install -y cron || {
+    echo "cron 安装失败"
+    exit 1
+}
+
+# 安装 rsyslog
+echo "安装 rsyslog..."
+apt install -y rsyslog || {
+    echo "rsyslog 安装失败"
+    exit 1
+}
+
+# 安装 logrotate
+echo "安装 logrotate..."
+apt install -y logrotate || {
+    echo "logrotate 安装失败"
+    exit 1
+}
+
 # 函数定义
 check_command() {
     command -v "$1" >/dev/null 2>&1 || {
