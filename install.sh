@@ -118,20 +118,29 @@ setup_ssh_key() {
             fi
 
             echo "正在将公钥添加到 authorized_keys..."
-            cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
+            if ! cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys; then
+                echo "错误：添加公钥到 authorized_keys 失败"
+                return 1
+            else
+                echo "公钥已添加到 authorized_keys"
+            fi
 
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
             echo "正在将私钥保存到临时文件: ${temp_key_file}"
-            cat "$ssh_key_file" > "$temp_key_file"
-            chmod 600 "$temp_key_file"
-            echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
+            if ! cat "$ssh_key_file" > "$temp_key_file"; then
+                echo "错误：保存私钥到临时文件失败"
+                return 1
+            else
+                chmod 600 "$temp_key_file"
+                echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
+            fi
 
             # 添加删除临时文件的逻辑
             trap 'rm -f "$temp_key_file"' EXIT
             ;;
         "import")
             read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
-            echo "用户输入的公钥是: '$pubkey'"  # 添加这行
+            echo "用户输入的公钥是: '$pubkey'"
             if ! [[ "$pubkey" =~ ^ssh-ed25519 ]]; then
                 echo "错误：公钥必须以 ssh-ed25519 开头，后跟一个空格"
                 return 1
@@ -144,8 +153,12 @@ setup_ssh_key() {
             fi
 
             echo "正在将公钥添加到 authorized_keys..."
-            echo "$pubkey" >> /root/.ssh/authorized_keys
-            echo "公钥已添加"
+            if ! echo "$pubkey" >> /root/.ssh/authorized_keys; then
+                echo "错误：添加公钥到 authorized_keys 失败"
+                return 1
+            else
+                echo "公钥已添加"
+            fi
             ;;
         *)
             echo "错误：无效的密钥类型，请使用 'generate' 或 'import'"
@@ -882,15 +895,16 @@ EOF
 
             echo "应用新的 SSH 配置..."
             systemctl restart "$SSH_SERVICE"
+            sleep 5 # 等待服务完全重启
 
             # 强制 SSH 服务重新加载配置
-            sleep 2 # 等待服务完全重启
             if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
               echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
               systemctl restart "$SSH_SERVICE"
             else
               echo "SSH 服务已重新加载配置。"
             fi
+            sleep 2 # 等待服务完全重启
 
             # 验证配置
             echo "验证 SSH 配置..."
@@ -961,7 +975,12 @@ EOF
             ssh_rule_exists=true
         else
             echo "添加新 SSH 端口 $NEW_SSH_PORT 到防火墙规则..."
-            ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'
+            if ! ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'; then
+                echo "错误：添加防火墙规则失败"
+                return 1
+            else
+                echo "已添加防火墙规则"
+            fi
         fi
         
         # 检查原 SSH 端口规则（如果不同）
@@ -971,7 +990,12 @@ EOF
                 KEEP_OLD_PORT=${KEEP_OLD_PORT:-y}
                 if [[ $KEEP_OLD_PORT =~ ^[Nn]$ ]]; then
                     echo "删除原 SSH 端口规则..."
-                    ufw delete allow "$CURRENT_SSH_PORT"/tcp
+                    if ! ufw delete allow "$CURRENT_SSH_PORT"/tcp; then
+                        echo "错误：删除原端口规则失败"
+                        return 1
+                    else
+                        echo "原端口规则已删除"
+                    fi
                 else
                     echo "保留原 SSH 端口规则作为备用"
                 fi
@@ -983,13 +1007,23 @@ EOF
         local honeypot_status=$?
         if [ "$honeypot_status" -eq 1 ]; then
             echo "添加蜜罐端口到防火墙规则..."
-            ufw allow 2222/tcp comment 'Cowrie Honeypot'
+            if ! ufw allow 2222/tcp comment 'Cowrie Honeypot'; then
+                echo "错误：添加蜜罐端口规则失败"
+                return 1
+            else
+                echo "已添加蜜罐端口规则"
+            fi
         elif [ "$honeypot_status" -eq 2 ]; then
             echo "警告: 端口 2222 已有其他规则，可能会影响蜜罐功能"
             read -p "是否添加新规则？[Y/n]: " -r ADD_HONEYPOT_RULE
             ADD_HONEYPOT_RULE=${ADD_HONEYPOT_RULE:-y}
             if [[ $ADD_HONEYPOT_RULE =~ ^[Yy]$ ]]; then
-                ufw allow 2222/tcp comment 'Cowrie Honeypot'
+                if ! ufw allow 2222/tcp comment 'Cowrie Honeypot'; then
+                    echo "错误：添加蜜罐端口规则失败"
+                    return 1
+                else
+                    echo "已添加蜜罐端口规则"
+                fi
             fi
         else
             echo "蜜罐端口规则已配置"
@@ -1001,8 +1035,12 @@ EOF
             ENABLE_UFW=${ENABLE_UFW:-y}
             if [[ $ENABLE_UFW =~ ^[Yy]$ ]]; then
                 echo "启用防火墙..."
-                ufw --force enable
-                echo "防火墙已启用"
+                if ! ufw --force enable; then
+                    echo "错误：启用防火墙失败"
+                    return 1
+                else
+                    echo "防火墙已启用"
+                fi
             else
                 print_warning "警告：防火墙未启用，请确保手动配置以下规则："
                 echo "- SSH 端口: $NEW_SSH_PORT/tcp"
@@ -1025,7 +1063,11 @@ EOF
 
     # 如果端口已更改，则更新 SSH 配置
     if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
-        sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
+        if ! sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config; then
+            echo "错误：更新 SSH 端口失败"
+        else
+            echo "SSH 端口已更新"
+        fi
     fi
 
     if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
@@ -1037,15 +1079,16 @@ EOF
         fi
         
         systemctl restart "$SSH_SERVICE"
+        sleep 5 # 等待服务完全重启
         
         # 强制 SSH 服务重新加载配置
-        sleep 2 # 等待服务完全重启
         if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
           echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
           systemctl restart "$SSH_SERVICE"
         else
           echo "SSH 服务已重新加载配置。"
         fi
+        sleep 2 # 等待服务完全重启
     fi
 
     echo "SSH 配置状态："
