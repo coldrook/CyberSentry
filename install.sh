@@ -136,6 +136,11 @@ check_ufw_rule() {
     return 1
 }
 
+#确保特权分离目录存在
+mkdir -p /run/sshd
+chown root:sys /run/sshd
+chmod 755 /run/sshd
+
 # 在函数定义部分添加备份管理函数
 backup_with_timestamp() {
     local file="$1"
@@ -759,6 +764,21 @@ EOF
             esac
 
             # 测试配置
+            echo "测试 SSH 配置..."
+            if ! sshd -t; then
+                echo "SSH 配置测试失败，恢复默认配置"
+                # 找到最新的备份文件
+                LATEST_BACKUP=$(find /root/config_backups -name "sshd_config*.bak" -print0 | xargs -0 ls -1t | head -n 1)
+                if [ -n "$LATEST_BACKUP" ]; then
+                    cp "$LATEST_BACKUP" /etc/ssh/sshd_config
+                    systemctl restart sshd
+                    exit 1
+                else
+                    echo "错误：未找到备份文件，无法恢复"
+                    exit 1
+                fi
+            fi
+
             echo "测试 SSH 配置..."
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复默认配置"
