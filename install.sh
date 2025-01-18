@@ -710,6 +710,11 @@ if [ "$SSH_CONFIGURED" != "true" ]; then
     echo "重新启动 SSH 服务..."
     systemctl restart ssh
 
+    # 更新防火墙规则
+    echo "更新防火墙规则..."
+    ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'
+    ufw delete allow "$CURRENT_SSH_PORT"/tcp
+
     echo "SSH 服务已重新启动，使用新的端口: ${NEW_SSH_PORT}"
 
     # SSH 认证配置
