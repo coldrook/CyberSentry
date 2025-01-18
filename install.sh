@@ -27,38 +27,10 @@ apt install -y net-tools || {
     exit 1
 }
 
-# 安装 cron
-echo "安装 cron..."
-apt install -y cron || {
-    echo "cron 安装失败"
-    exit 1
-}
-
-# 安装 rsyslog
-echo "安装 rsyslog..."
-apt install -y rsyslog || {
-    echo "rsyslog 安装失败"
-    exit 1
-}
-
-# 安装 logrotate
-echo "安装 logrotate..."
-apt install -y logrotate || {
-    echo "logrotate 安装失败"
-    exit 1
-}
-
-# 安装 ufw
-echo "安装 ufw..."
-apt install -y ufw || {
-    echo "ufw 安装失败"
-    exit 1
-}
-
 # 函数定义
 check_command() {
     command -v "$1" >/dev/null 2>&1 || {
-        echo "错误：未找到命令 $1"
+        echo "错误：未找到命 $1"
         exit 1
     }
 }
@@ -68,99 +40,37 @@ backup_config() {
     [ -f "$config_file" ] && cp "$config_file" "${config_file}.bak"
 }
 
-# 添加 Python 版本检测函数（在函数定义部分）
-get_python_version() {
-    python3 --version 2>&1 | awk '{print $2}'
-}
-
 write_config() {
     local file="$1"
     cat > "$file"
 }
 
-# sshd&ssh兼容选择
-SSH_SERVICE=$(if systemctl is-active sshd > /dev/null 2>&1; then echo "sshd"; elif systemctl is-active ssh > /dev/null 2>&1; then echo "ssh"; else echo ""; fi)
-if [ -z "$SSH_SERVICE" ]; then
-  echo "错误：未找到 SSH 服务 (sshd 或 ssh)。请确保 SSH 服务已安装。"
-  exit 1
-fi
-
-echo "检查 SSH 配置..."
-
-# 密钥处理函数
 setup_ssh_key() {
     local key_type="$1"
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
-
+    
     case $key_type in
         "generate")
-            local ssh_key_file="/root/.ssh/id_ed25519_256"
-            echo "正在尝试生成 SSH 密钥..."
-            if ! ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""; then
-                echo "错误：SSH 密钥生成失败，返回码: $?"
-                return 1
-            else
-                echo "SSH 密钥生成成功。"
-            fi
-
-            # 确保 authorized_keys 文件存在并设置权限
-            if [ ! -f /root/.ssh/authorized_keys ]; then
-                echo "authorized_keys 文件不存在，正在创建..."
-                touch /root/.ssh/authorized_keys
-                chmod 600 /root/.ssh/authorized_keys
-            fi
-
-            echo "正在将公钥添加到 authorized_keys..."
-            if ! cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys; then
-                echo "错误：添加公钥到 authorized_keys 失败"
-                return 1
-            else
-                echo "公钥已添加到 authorized_keys"
-            fi
-
+            local ssh_key_file="/root/.ssh/id_rsa"
+            ssh-keygen -t rsa -b 4096 -f "$ssh_key_file" -N ""
+            cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
             local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
-            echo "正在将私钥保存到临时文件: ${temp_key_file}"
-            if ! cat "$ssh_key_file" > "$temp_key_file"; then
-                echo "错误：保存私钥到临时文件失败"
-                return 1
-            else
-                chmod 600 "$temp_key_file"
-                echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
-            fi
-
-            # 添加删除临时文件的逻辑
-            trap 'rm -f "$temp_key_file"' EXIT
+            cat "$ssh_key_file" > "$temp_key_file"
+            chmod 600 "$temp_key_file"
+            echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
             ;;
         "import")
-            read -r -p "请输入Xshell等客户端生成的 SSH 公钥 (ssh-ed25519 ...): " pubkey
-            echo "用户输入的公钥是: '$pubkey'"
-            if ! [[ "$pubkey" =~ ^ssh-ed25519 ]]; then
-                echo "错误：公钥必须以 ssh-ed25519 开头，后跟一个空格"
+            read -r -p "请输入 SSH 公钥: " pubkey
+            [[ $pubkey == ssh-rsa* ]] || {
+                echo "错误：无效的公钥格式"
                 return 1
-            fi
-
-            # 确保 authorized_keys 文件存在并设置权限
-            if [ ! -f /root/.ssh/authorized_keys ]; then
-                touch /root/.ssh/authorized_keys
-                chmod 600 /root/.ssh/authorized_keys
-            fi
-
-            echo "正在将公钥添加到 authorized_keys..."
-            if ! echo "$pubkey" >> /root/.ssh/authorized_keys; then
-                echo "错误：添加公钥到 authorized_keys 失败"
-                return 1
-            else
-                echo "公钥已添加"
-            fi
-            ;;
-        *)
-            echo "错误：无效的密钥类型，请使用 'generate' 或 'import'"
-            return 1
+            }
+            echo "$pubkey" >> /root/.ssh/authorized_keys
+            echo "公钥已添加"
             ;;
     esac
-
-    chmod 600 /root/.ssh/authorized_keys # 确保权限正确
+    chmod 600 /root/.ssh/authorized_keys
 }
 
 check_installed() {
@@ -174,18 +84,35 @@ check_installed() {
     return 1
 }
 
-# 防火墙规则检查函数
+# 添加 Python 版本检测函数（在函数定义部分）
+get_python_version() {
+    local py_version
+    py_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+    echo "$py_version"
+}
+
+# 修改防火墙规则检查函数
 check_ufw_rule() {
     local port="$1"
     local comment="$2"
-    ufw status | grep -q " $port\/tcp.*$comment"
-    if [ $? -eq 0 ]; then
-        return 0 # 规则存在
-    elif ufw status | grep -q " $port\/tcp"; then
-        return 2 # 端口存在，但注释不匹配
-    else
-        return 1 # 规则不存在
+    
+    # 检查所有可能的规则格式（包括带注释和不带注释的）
+    if ufw status | grep -qE "^($port(/tcp)?|$port(/tcp)? \(v6\))\s+ALLOW"; then
+        # 如果指定了注释，检查是否有带注释的规则
+        if [ -n "$comment" ]; then
+            if ufw status | grep -E "^$port(/tcp)?\s+.*#.*$comment" >/dev/null; then
+                echo "端口 $port 已配置 ($comment)"
+                return 0
+            fi
+            # 存在端口但没有指定注释
+            echo "端口 $port 已存在其他规则"
+            return 2
+        else
+            echo "端口 $port 已配置"
+            return 0
+        fi
     fi
+    return 1
 }
 
 # 在函数定义部分添加备份管理函数
@@ -221,6 +148,24 @@ backup_with_timestamp() {
     return 1
 }
 
+# 变量定义
+COWRIE_INSTALL_DIR="/opt/cowrie"
+LOG_RETENTION_DAYS=30
+CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
+CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
+
+# 在开始时先检查并安装 net-tools
+echo "检查 netstat 命令..."
+if ! command -v netstat &> /dev/null; then
+    echo "netstat 命令未找到，正在安装 net-tools..."
+    apt update
+    apt install -y net-tools || {
+        echo "net-tools 安装失败"
+        exit 1
+    }
+    echo "net-tools 安装完成"
+fi
+
 # 环境检查
 for cmd in apt systemctl grep awk; do
     check_command "$cmd"
@@ -252,16 +197,29 @@ EOF
 echo "检查系统软件源..."
 update_sources
 
-# 添加 Python 版本检测函数
+# 添加在环境检查部分之前
+echo "设置系统时区为上海..."
+if [ -f /usr/share/zoneinfo/Asia/Shanghai ]; then
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    echo "Asia/Shanghai" > /etc/timezone
+    dpkg-reconfigure -f noninteractive tzdata
+    echo "时区已设置为上海"
+else
+    echo "警告：无法找到上海时区文件"
+fi
+
+# 修改 Python 版本检测函数
 check_python_version() {
     local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    # 将版本号分解为主版本和次版本
     local required_major=3
     local required_minor=9
-    local current_major=$(echo "$current_version" | cut -d. -f1)
-    local current_minor=$(echo "$current_version" | cut -d. -f2)
+    local current_major=$(echo $current_version | cut -d. -f1)
+    local current_minor=$(echo $current_version | cut -d. -f2)
     
-    if [[ "$current_major" -gt "$required_major" ]] ||
-       ([[ "$current_major" -eq "$required_major" ]] && [[ "$current_minor" -ge "$required_minor" ]]); then
+    # 先比较主版本，如果主版本相同则比较次版本
+    if [ "$current_major" -gt "$required_major" ] || 
+       ([ "$current_major" -eq "$required_major" ] && [ "$current_minor" -ge "$required_minor" ]); then
         echo "当前 Python 版本 ($current_version) 满足要求"
         return 0
     else
@@ -274,62 +232,29 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
-    local python_version="3.9" # Default to 3.11, can be changed
-    local python_pkg="python${python_version}"
-    local python_dev_pkg="python${python_version}-dev"
-    local python_venv_pkg="python${python_version}-venv"
-
-    echo "开始升级 Python 到 ${python_version}..."
-
+    
     case "$os_id" in
         "debian")
             case "$os_version" in
                 "10")
                     echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
                     apt update
-                    apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv python3-pip
+                    apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv
                     ;;
                 "11"|"12")
-                    sudo apt update
-                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
-                        echo "成功将 Python 升级到 ${python_version}。"
-                    else
-                        echo "升级 Python 到 ${python_version} 失败。"
-                        return 1
-                    fi
-                    ;;
-                *)
-                    echo "不支持的 Debian 版本: ${os_version}"
-                    return 1
+                    apt update
+                    apt install -y python3.9 python3.9-dev python3.9-venv
                     ;;
             esac
             ;;
         "ubuntu")
-            case "$os_version" in
-                "20.04"|"22.04"|"24.04")
-                    sudo apt update
-                    sudo apt install -y software-properties-common
-                    sudo add-apt-repository ppa:deadsnakes/ppa -y
-                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
-                        echo "成功将 Python 升级到 ${python_version}。"
-                    else
-                        echo "升级 Python 到 ${python_version} 失败。"
-                        return 1
-                    fi
-                    ;;
-                *)
-                    echo "不支持的 Ubuntu 版本: ${os_version}"
-                    return 1
-                    ;;
-            esac
-            ;;
-        *)
-            echo "不支持的操作系统: ${os_id}"
-            return 1
+            add-apt-repository -y ppa:deadsnakes/ppa
+            apt update
+            apt install -y python3.9 python3.9-dev python3.9-venv
             ;;
     esac
+    
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 }
 
 # 添加 Python 依赖修复函数
@@ -338,8 +263,8 @@ fix_python_deps() {
     # 修复 apt_pkg 模块
     if ! python3 -c "import apt_pkg" 2>/dev/null; then
         echo "重新安装 python3-apt 以修复 apt_pkg 模块..."
-        sudo apt-get remove --purge -y python3-apt
-        sudo apt-get install -y python3-apt
+        apt-get remove --purge -y python3-apt
+        apt-get install -y python3-apt
     fi
 }
 
@@ -368,7 +293,7 @@ fi
 
 # 系统依赖安装和 Python 环境检查
 echo "安装依赖..."
-apt install -y fail2ban python3-virtualenv git curl || {
+apt install -y fail2ban python3-virtualenv git curl netstat-nat || {
     echo "依赖安装失败，请检查系统配置"
     exit 1
 }
@@ -376,8 +301,12 @@ apt install -y fail2ban python3-virtualenv git curl || {
 # 检查 Python 环境
 if ! python3 -c "import distutils" 2>/dev/null; then
     echo "正在安装 Python 兼容环境..."
-    python3 -m ensurepip
+    apt install -y python3.7 python3.7-distutils
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
 fi
+
+apt upgrade -y
+apt install -y fail2ban python3-virtualenv git curl netstat-nat
 
 # 添加 fail2ban 配置函数
 configure_fail2ban() {
@@ -464,86 +393,18 @@ EOF
 install_fail2ban_deps() {
     echo "安装fail2ban依赖..."
     apt update
-
-    # 如果fail2ban服务在运行，先停止它
-    if systemctl is-active --quiet fail2ban; then
-        echo "停止fail2ban服务..."
-        systemctl stop fail2ban
-        systemctl disable fail2ban
-    fi
-
-    # 检查并删除可能存在的运行时文件
-    if [ -f /var/run/fail2ban/fail2ban.pid ]; then
-        rm -f /var/run/fail2ban/fail2ban.pid
-    fi
-
-    # 备份配置文件
-    if [ -f /etc/fail2ban/jail.local ]; then
-        echo "备份现有配置..."
-        cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.backup
-    fi
-
-    # 完全移除现有fail2ban
-    echo "移除现有fail2ban..."
-    apt remove --purge -y python3-systemd fail2ban
-    apt autoremove -y
-
-    # 清理残留文件
-    rm -rf /var/lib/fail2ban
-    
-    # 安装构建依赖
-    apt install -y git python3-pip python3-dev build-essential pkg-config libsystemd-dev
-    
-    # 使用pip3安装systemd
-    pip3 install systemd-python || {
-        echo "systemd-python安装失败"
+    # 安装python3-systemd包以解决systemd后端问题
+    apt install -y python3-systemd || {
+        echo "python3-systemd安装失败"
         return 1
     }
-
-    # 从GitHub克隆最新版本fail2ban
-    cd /tmp
-    git clone https://github.com/fail2ban/fail2ban.git
-    cd fail2ban
-    
-    # 安装fail2ban
-    python3 setup.py install || {
+    # 确保fail2ban完全卸载后重新安装
+    apt remove --purge -y fail2ban
+    apt autoremove -y
+    apt install -y fail2ban || {
         echo "fail2ban安装失败"
         return 1
     }
-    
-    # 创建必要的目录和文件
-    mkdir -p /etc/fail2ban
-    mkdir -p /var/run/fail2ban
-    
-    # 复制默认配置文件
-    cp /tmp/fail2ban/config/jail.conf /etc/fail2ban/jail.conf
-    cp /tmp/fail2ban/config/fail2ban.conf /etc/fail2ban/fail2ban.conf
-    
-    # 创建systemd服务文件
-    cat > /lib/systemd/system/fail2ban.service <<EOF
-[Unit]
-Description=Fail2Ban Service
-Documentation=man:fail2ban(1)
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/fail2ban-server -f -x -b start
-ExecStop=/usr/local/bin/fail2ban-client stop
-ExecReload=/usr/local/bin/fail2ban-client reload
-PIDFile=/var/run/fail2ban/fail2ban.pid
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # 重新加载systemd
-    systemctl daemon-reload
-    
-    # 清理临时文件
-    rm -rf /tmp/fail2ban
-    
     return 0
 }
 
@@ -552,8 +413,7 @@ echo "检查 fail2ban 状态..."
 
 # 先检查是否已安装
 if ! command -v fail2ban-client &>/dev/null || \
-   ! python3 -c "import systemd.journal" 2>/dev/null; then
-    echo "fail2ban 或必要的 Python 模块未安装，开始安装..."
+   ! python3 -c "import systemd" 2>/dev/null; then
     echo "fail2ban 未安装或缺少必要依赖，开始安装..."
     install_fail2ban_deps || {
         echo "fail2ban及其依赖安装失败"
@@ -584,20 +444,14 @@ else
     configure_fail2ban || exit 1
 fi
 
-# 变量定义
-COWRIE_INSTALL_DIR="/opt/cowrie"
-LOG_RETENTION_DAYS=30
-CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
-CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
-
 # 日志清理脚本配置
 echo "检查日志清理配置..."
 if [ ! -f "$CLEANUP_LOG_SCRIPT" ]; then
     echo "配置日志清理..."
     cat > "$CLEANUP_LOG_SCRIPT" <<'EOFF'
 #!/bin/bash
-find /var/log -type f -name "*.log" -mtime +$LOG_RETENTION_DAYS -exec rm -f {} \;
-echo "$(date): Logs older than $LOG_RETENTION_DAYS days have been deleted." >> /var/log/cleanup.log
+find /var/log -type f -name "*.log" -mtime +30 -exec rm -f {} \;
+echo "$(date): Logs older than 30 days have been deleted." >> /var/log/cleanup.log
 EOFF
 
     chmod +x "$CLEANUP_LOG_SCRIPT"
@@ -612,10 +466,12 @@ else
     echo "日志清理已配置，跳过"
 fi
 
+echo "开始安装 Cowrie..."
+
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
 COWRIE_INSTALLED=false
-if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/cowrie/bin/cowrie" ]; then
+if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/bin/cowrie" ]; then
     echo "检测到现有 Cowrie 安装，检查完整性..."
     if [ -f "/etc/systemd/system/cowrie.service" ] && [ -d "$COWRIE_INSTALL_DIR/var/log/cowrie" ]; then
         COWRIE_INSTALLED=true
@@ -626,87 +482,67 @@ fi
 if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "开始安装 Cowrie..."
     
-    # 创建 Cowrie 用户
+    # 创建 Cowrie 用户和主目录
     echo "创建 Cowrie 用户..."
     if ! id cowrie &>/dev/null; then
-        useradd -r -d "$COWRIE_INSTALL_DIR" -s /bin/bash cowrie || {  
+        useradd -m -s /bin/bash cowrie || {
             echo "创建 cowrie 用户失败"
             exit 1
-            } 
-       fi
+        }
+    fi
 
     # 准备目录
     echo "准备安装目录..."
-    rm -rf "$COWRIE_INSTALL_DIR" # 删除整个目录及其内容
+    rm -rf "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
-    chown cowrie:cowrie "$COWRIE_INSTALL_DIR"
-
-    # 以 cowrie 用户身份执行安装
-    echo "执行安装..."
-    runuser -l cowrie -c "
-        cd $COWRIE_INSTALL_DIR/cowrie
-        rm -rf *
-        git clone https://github.com/cowrie/cowrie.git || {
-            echo 'git clone 失败'
-            exit 1
-        }
-        cd cowrie
-
-        if [ ! -f requirements.txt ]; then
-            echo '错误：找不到 requirements.txt 文件'
-            exit 1
-        fi
-
-        python3 -m virtualenv cowrie-env || {
-            echo '创建虚拟环境失败'
-            exit 1
-        }
-        source cowrie-env/bin/activate &&
-        pip install --upgrade pip &&
-        pip install -r requirements.txt || {
-            echo '安装依赖失败'
-            exit 1
-        }
-
-        if [ ! -f etc/cowrie.cfg.dist ]; then
-            echo '错误：找不到 etc/cowrie.cfg.dist 文件'
-            exit 1
-        fi
-
-        cp etc/cowrie.cfg.dist etc/cowrie.cfg || {
-            echo '复制配置文件失败'
-            exit 1
-        }
-
-        mkdir -p var/log/cowrie
-        chmod 700 var/log/cowrie
-    " || {
-        echo "Cowrie 安装失败"
+    
+    # 克隆仓库
+    echo "克隆 Cowrie 仓库..."
+    git clone https://github.com/cowrie/cowrie.git "$COWRIE_INSTALL_DIR" || {
+        echo "克隆 Cowrie 仓库失败"
         exit 1
     }
 
-    # 在 runuser 外部执行 sed 命令
-    echo "配置 Cowrie 设置..."
-    sed -i "s/hostname = svr04/hostname = ubuntulatest-prod/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
-    sed -i "s/^#listen_port=2222/listen_port=2222/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
-    sed -i "s/^#download_limit_size=10485760/download_limit_size=1048576/" "$COWRIE_INSTALL_DIR/cowrie/etc/cowrie.cfg"
+    # 先用 root 执行初始化操作
+    echo "初始化 Python 环境..."
+    cd "$COWRIE_INSTALL_DIR"
+    python3 -m virtualenv cowrie-env || {
+        echo "创建虚拟环境失败"
+        exit 1
+    }
 
-    # 确保权限正确
+    # 激活虚拟环境并安装依赖
+    echo "安装依赖..."
+    source cowrie-env/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt || {
+        echo "安装依赖失败"
+        exit 1
+    }
+    deactivate
+
+    # 配置 Cowrie
+    echo "配置 Cowrie..."
+    cp etc/cowrie.cfg.dist etc/cowrie.cfg
+    sed -i 's/hostname = svr04/hostname = macmini/' etc/cowrie.cfg
+    sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
+    sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
+    
+    # 创建日志目录
+    mkdir -p var/log/cowrie
+
+    # 最后设置权限
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
     chmod -R 755 "$COWRIE_INSTALL_DIR"
+    chmod 700 "$COWRIE_INSTALL_DIR/var/log/cowrie"
+
+    echo "Cowrie 基础安装完成"
 fi
 
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
-# 查找 site-packages 目录
-SITE_PACKAGES_DIR=$(find "$COWRIE_INSTALL_DIR/cowrie/cowrie-env/lib/" -maxdepth 3 -type d -name "site-packages" -print -quit)
-if [ -z "$SITE_PACKAGES_DIR" ]; then
-    echo "错误：无法找到 site-packages 目录"
-    exit 1
-fi
-
 cat <<EOF > /etc/systemd/system/cowrie.service
 [Unit]
 Description=Cowrie SSH Honeypot
@@ -716,10 +552,10 @@ After=network.target
 Type=simple
 User=cowrie
 Group=cowrie
-WorkingDirectory=$COWRIE_INSTALL_DIR/cowrie
-Environment="PYTHONPATH=$SITE_PACKAGES_DIR"
+WorkingDirectory=$COWRIE_INSTALL_DIR
+Environment="PYTHONPATH=$COWRIE_INSTALL_DIR/cowrie-env/lib/python${PYTHON_VERSION}/site-packages"
 Environment="PATH=$COWRIE_INSTALL_DIR/cowrie-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR/cowrie && source cowrie-env/bin/activate && bin/cowrie start -n'
+ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && bin/cowrie start -n'
 Restart=always
 RestartSec=30
 
@@ -730,53 +566,11 @@ EOF
 # 重载并启动服务
 systemctl daemon-reload
 systemctl enable cowrie
-systemctl start cowrie # 使用 start 而不是 restart
+systemctl start cowrie
 
-# 状态文件
-STATE_FILE="/tmp/backtrance_install_state.txt"
-
-# 定义一个函数来保存当前脚本执行的状态和数据
-save_state() {
-    local state="$1"
-    local data="$2"
-    echo "保存状态: $state, 数据: $data"
-    echo "$state" > "$STATE_FILE"
-    if [ -n "$data" ]; then
-        echo "$data" >> "$STATE_FILE"
-    fi
-}
-
-# 定义一个函数来读取上次的执行状态和数据
-load_state() {
-    if [ -f "$STATE_FILE" ]; then
-        read -r STATE < "$STATE_FILE"
-        if read -r DATA < "$STATE_FILE"; then
-            echo "读取状态: $STATE, 数据: $DATA"
-            echo "$STATE" "$DATA"
-        else
-            echo "读取状态: $STATE, 无数据"
-            echo "$STATE"
-        fi
-    else
-        echo "读取状态: start, 无状态文件"
-        echo "start"
-    fi
-}
-
-# 定义一个函数来删除状态文件
-clear_state() {
-  echo "删除状态文件: $STATE_FILE"
-  rm -f "$STATE_FILE"
-}
-
-# 获取上次执行状态
-load_state_result=$(load_state)
-STATE=$(echo "$load_state_result" | awk '{print $1}')
-SAVED_SSH_PORT=$(echo "$load_state_result" | awk '{print $2}')
-
-# 检查是否已配置
-SSH_CONFIGURED=false
-if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
+# SSH 安全配置
+echo "检查 SSH 配置..."
+if [ -f "/root/.ssh/id_rsa" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     read -p "SSH 已配置，是否重新配置？[y/N]: " RECONFIGURE_SSH
     if [[ ! $RECONFIGURE_SSH =~ ^[Yy]$ ]]; then
         echo "保持当前 SSH 配置"
@@ -784,34 +578,7 @@ if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     fi
 fi
 
-# 美化输出函数
-print_header() {
-    echo -e "\n\033[1;34m========================================\033[0m"
-    echo -e "\033[1;34m$1\033[0m"
-    echo -e "\033[1;34m========================================\033[0m"
-}
-
-print_info() {
-    echo -e "\033[1;37m$1\033[0m"
-}
-
-print_success() {
-    echo -e "\033[1;32m$1\033[0m"
-}
-
-print_warning() {
-    echo -e "\033[1;33m$1\033[0m"
-}
-
-print_error() {
-    echo -e "\033[1;31m$1\033[0m"
-}
-# 脚本开始
-if [ "$STATE" = "start" ]; then
-    save_state "ssh_config"
-fi
-
-if [ "$STATE" = "ssh_config" ] && [ "$SSH_CONFIGURED" != "true" ]; then
+if [ "$SSH_CONFIGURED" != "true" ]; then
     echo "配置 SSH..."
     # 检测当前 SSH 配置
     current_ssh_config() {
@@ -941,30 +708,13 @@ EOF
             echo "测试 SSH 配置..."
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复默认配置"
-                # 找到最新的备份文件
-                LATEST_BACKUP=$(find . -maxdepth 1 -name "sshd_config.bak.*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d' ' -f 2-)
-                if [ -n "$LATEST_BACKUP" ]; then
-                    mv "$LATEST_BACKUP" /etc/ssh/sshd_config
-                else
-                    echo "错误：未找到备份文件，无法恢复"
-                    exit 1
-                fi
-                systemctl restart "$SSH_SERVICE"
+                mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
+                systemctl restart sshd
                 exit 1
             fi
 
             echo "应用新的 SSH 配置..."
-            systemctl restart "$SSH_SERVICE"
-            sleep 5 # 等待服务完全重启
-
-            # 强制 SSH 服务重新加载配置
-            if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
-              echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
-              systemctl restart "$SSH_SERVICE"
-            else
-              echo "SSH 服务已重新加载配置。"
-            fi
-            sleep 2 # 等待服务完全重启
+            systemctl restart ssh
 
             # 验证配置
             echo "验证 SSH 配置..."
@@ -979,15 +729,8 @@ EOF
                 read -r CONTINUE
                 if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
                     echo "恢复原始配置..."
-                    # 找到最新的备份文件
-                    LATEST_BACKUP=$(find . -maxdepth 1 -name "sshd_config.bak.*" -printf "%T@ %p\n" | sort -n | tail -n 1 | cut -d' ' -f 2-)
-                    if [ -n "$LATEST_BACKUP" ]; then
-                        mv "$LATEST_BACKUP" /etc/ssh/sshd_config
-                    else
-                        echo "错误：未找到备份文件，无法恢复"
-                        exit 1
-                    fi
-                    systemctl restart "$SSH_SERVICE"
+                    mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
+                    systemctl restart ssh
                     exit 1
                 fi
             fi
@@ -1005,55 +748,6 @@ EOF
             ;;
     esac
 
-    # 如果端口已更改，则更新 SSH 配置
-    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
-        if ! sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config; then
-            echo "错误：更新 SSH 端口失败"
-        else
-            echo "SSH 端口已更新"
-        fi
-    fi
-
-    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
-        # 尝试使用 killall 强制重启 sshd 进程
-        if pgrep -x "$SSH_SERVICE" > /dev/null; then
-            echo "尝试使用 killall 强制重启 $SSH_SERVICE 进程..."
-            killall -9 "$SSH_SERVICE"
-            sleep 2 # 等待进程完全停止
-        fi
-        
-        systemctl restart "$SSH_SERVICE"
-        sleep 5 # 等待服务完全重启
-        
-        # 强制 SSH 服务重新加载配置
-        if ! systemctl reload "$SSH_SERVICE" > /dev/null 2>&1; then
-          echo "警告：SSH 服务重新加载配置失败，尝试使用 restart"
-          systemctl restart "$SSH_SERVICE"
-        else
-          echo "SSH 服务已重新加载配置。"
-        fi
-        sleep 2 # 等待服务完全重启
-    fi
-    
-    save_state "firewall_config"
-    echo "SSH 配置完成，准备配置防火墙"
-    
-    # 执行重启
-    echo "系统重启中..."
-    reboot
-    exit 0 # 避免继续执行
-fi
-
-if [ "$STATE" = "firewall_config" ]; then
-    # 如果状态文件中没有保存端口，则使用默认端口
-    if [ -z "$SAVED_SSH_PORT" ]; then
-        NEW_SSH_PORT="22"
-        echo "警告：未找到保存的 SSH 端口，使用默认端口 22"
-    else
-        NEW_SSH_PORT="$SAVED_SSH_PORT"
-        echo "使用保存的 SSH 端口: $NEW_SSH_PORT"
-    fi
-    
     # 防火墙配置
     setup_firewall() {
         echo "开始设置防火墙规则..."
@@ -1084,12 +778,7 @@ if [ "$STATE" = "firewall_config" ]; then
             ssh_rule_exists=true
         else
             echo "添加新 SSH 端口 $NEW_SSH_PORT 到防火墙规则..."
-            if ! ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'; then
-                echo "错误：添加防火墙规则失败"
-                return 1
-            else
-                echo "已添加防火墙规则"
-            fi
+            ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'
         fi
         
         # 检查原 SSH 端口规则（如果不同）
@@ -1099,12 +788,7 @@ if [ "$STATE" = "firewall_config" ]; then
                 KEEP_OLD_PORT=${KEEP_OLD_PORT:-y}
                 if [[ $KEEP_OLD_PORT =~ ^[Nn]$ ]]; then
                     echo "删除原 SSH 端口规则..."
-                    if ! ufw delete allow "$CURRENT_SSH_PORT"/tcp; then
-                        echo "错误：删除原端口规则失败"
-                        return 1
-                    else
-                        echo "原端口规则已删除"
-                    fi
+                    ufw delete allow "$CURRENT_SSH_PORT"/tcp
                 else
                     echo "保留原 SSH 端口规则作为备用"
                 fi
@@ -1116,23 +800,13 @@ if [ "$STATE" = "firewall_config" ]; then
         local honeypot_status=$?
         if [ "$honeypot_status" -eq 1 ]; then
             echo "添加蜜罐端口到防火墙规则..."
-            if ! ufw allow 2222/tcp comment 'Cowrie Honeypot'; then
-                echo "错误：添加蜜罐端口规则失败"
-                return 1
-            else
-                echo "已添加蜜罐端口规则"
-            fi
+            ufw allow 2222/tcp comment 'Cowrie Honeypot'
         elif [ "$honeypot_status" -eq 2 ]; then
             echo "警告: 端口 2222 已有其他规则，可能会影响蜜罐功能"
             read -p "是否添加新规则？[Y/n]: " -r ADD_HONEYPOT_RULE
             ADD_HONEYPOT_RULE=${ADD_HONEYPOT_RULE:-y}
             if [[ $ADD_HONEYPOT_RULE =~ ^[Yy]$ ]]; then
-                if ! ufw allow 2222/tcp comment 'Cowrie Honeypot'; then
-                    echo "错误：添加蜜罐端口规则失败"
-                    return 1
-                else
-                    echo "已添加蜜罐端口规则"
-                fi
+                ufw allow 2222/tcp comment 'Cowrie Honeypot'
             fi
         else
             echo "蜜罐端口规则已配置"
@@ -1144,12 +818,8 @@ if [ "$STATE" = "firewall_config" ]; then
             ENABLE_UFW=${ENABLE_UFW:-y}
             if [[ $ENABLE_UFW =~ ^[Yy]$ ]]; then
                 echo "启用防火墙..."
-                if ! ufw --force enable; then
-                    echo "错误：启用防火墙失败"
-                    return 1
-                else
-                    echo "防火墙已启用"
-                fi
+                ufw --force enable
+                echo "防火墙已启用"
             else
                 print_warning "警告：防火墙未启用，请确保手动配置以下规则："
                 echo "- SSH 端口: $NEW_SSH_PORT/tcp"
@@ -1170,204 +840,209 @@ if [ "$STATE" = "firewall_config" ]; then
     setup_firewall || true
     echo "继续执行后续配置..."
 
-    save_state "service_check"
-    echo "防火墙配置完成，准备检查服务状态"
+    # 如果端口已更改，则更新 SSH 配置
+    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
+        sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
+    fi
 
-    # 执行重启
-    echo "系统重启中..."
-    reboot
-    exit 0 # 避免继续执行
+    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
+        systemctl restart ssh
+    fi
+
+    echo "SSH 配置状态："
+    [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] && echo "- SSH 端口已更改为: ${NEW_SSH_PORT}"
+    [ "$AUTH_CHOICE" != "0" ] && echo "- SSH 认证配置已更新"
+    [ "$SETUP_UFW" = "y" ] && echo "- 防火墙规则已更新"
+    echo "=========================="
 fi
 
-if [ "$STATE" = "service_check" ]; then
-    # 如果状态文件中没有保存端口，则使用默认端口
-    if [ -z "$SAVED_SSH_PORT" ]; then
-        NEW_SSH_PORT="22"
-        echo "警告：未找到保存的 SSH 端口，使用默认端口 22"
-    else
-        NEW_SSH_PORT="$SAVED_SSH_PORT"
-        echo "使用保存的 SSH 端口: $NEW_SSH_PORT"
-    fi
-    
-    # 检查服务状态
-    echo "检查服务状态..."
-    SERVICE_CHECK_FAILED=false
+# 检查服务状态
+echo "检查服务状态..."
+SERVICE_CHECK_FAILED=false
 
-    check_service() {
-        local service_name="$1"
-        echo "检查 $service_name 服务状态..."
-        
-        if ! systemctl is-active --quiet "$service_name"; then
-            echo "服务未运行，检查问题..."
-            if [ "$service_name" = "cowrie" ]; then
-                echo "===== Cowrie 服务状态 ====="
-                systemctl status cowrie
-                echo "===== Cowrie 日志 ====="
-                journalctl -u cowrie --no-pager -n 50
-                echo "===== 进程检查 ====="
-                ps aux | grep cowrie
-                echo "===== 权限检查 ====="
-                ls -la "$COWRIE_INSTALL_DIR"
-                ls -la "$COWRIE_INSTALL_DIR/bin"
-                echo "===== Python 环境 ====="
-                runuser -l cowrie -c "cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && python3 -V"
-            fi
-            return 1
+check_service() {
+    local service_name="$1"
+    echo "检查 $service_name 服务状态..."
+    
+    if ! systemctl is-active --quiet "$service_name"; then
+        echo "服务未运行，检查问题..."
+        if [ "$service_name" = "cowrie" ]; then
+            echo "===== Cowrie 服务状态 ====="
+            systemctl status cowrie
+            echo "===== Cowrie 日志 ====="
+            journalctl -u cowrie --no-pager -n 50
+            echo "===== 进程检查 ====="
+            ps aux | grep cowrie
+            echo "===== 权限检查 ====="
+            ls -la "$COWRIE_INSTALL_DIR"
+            ls -la "$COWRIE_INSTALL_DIR/bin"
+            echo "===== Python 环境 ====="
+            runuser -l cowrie -c "cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && python3 -V"
         fi
-        echo "$service_name 服务运行正常"
-        return 0
-    }
-
-    # 检查各个服务
-    check_service "cowrie"
-    check_service "fail2ban"
-
-    # 在最终状态报告前添加防火墙检查和提示
-    echo "检查防火墙状态..."
-    if ! command -v ufw >/dev/null 2>&1; then
-        echo "提示：系统未安装防火墙(UFW)，建议安装并配置以提高安全性"
-        echo "安装和配置方法："
-        echo "apt install ufw"
-        echo "ufw allow ${NEW_SSH_PORT:-22}/tcp  # 开放 SSH 端口"
-        echo "ufw allow 2222/tcp                 # 开放蜜罐端口"
-        echo "ufw enable                         # 启用防火墙"
-    else
-        echo "防火墙状态："
-        if ufw status | grep -q "Status: active"; then
-            echo "- UFW 已启用"
-            echo "- SSH 端口状态: $(ufw status | grep -E "$NEW_SSH_PORT/tcp" || echo "未开放")"
-            echo "- 蜜罐端口状态: $(ufw status | grep "2222/tcp" || echo "未开放")"
-        else
-            echo "警告：UFW 防火墙已安装但未启用"
-            echo "建议执行以下命令配置防火墙："
-            echo "ufw allow ${NEW_SSH_PORT:-22}/tcp"
-            echo "ufw allow 2222/tcp"
-            echo "ufw enable"
-        fi
+        return 1
     fi
-    
-    save_state "final_report"
-    echo "服务状态检查完成，准备输出最终报告"
-    
-    # 执行重启
-    echo "系统重启中..."
-    reboot
-    exit 0 # 避免继续执行
+    echo "$service_name 服务运行正常"
+    return 0
+}
+
+# 检查各个服务
+check_service "cowrie"
+check_service "fail2ban"
+
+# 在最终状态报告前添加防火墙检查和提示
+echo "检查防火墙状态..."
+if ! command -v ufw >/dev/null 2>&1; then
+    echo "提示：系统未安装防火墙(UFW)，建议安装并配置以提高安全性"
+    echo "安装和配置方法："
+    echo "apt install ufw"
+    echo "ufw allow ${NEW_SSH_PORT:-22}/tcp  # 开放 SSH 端口"
+    echo "ufw allow 2222/tcp                 # 开放蜜罐端口"
+    echo "ufw enable                         # 启用防火墙"
+else
+    echo "防火墙状态："
+    if ufw status | grep -q "Status: active"; then
+        echo "- UFW 已启用"
+        echo "- SSH 端口状态: $(ufw status | grep -E "$NEW_SSH_PORT/tcp" || echo "未开放")"
+        echo "- 蜜罐端口状态: $(ufw status | grep "2222/tcp" || echo "未开放")"
+    else
+        echo "警告：UFW 防火墙已安装但未启用"
+        echo "建议执行以下命令配置防火墙："
+        echo "ufw allow ${NEW_SSH_PORT:-22}/tcp"
+        echo "ufw allow 2222/tcp"
+        echo "ufw enable"
+    fi
 fi
 
-if [ "$STATE" = "final_report" ]; then
-    # 修改获取当前 SSH 端口的函数
-    get_current_ssh_port() {
-        # 优先使用脚本中设置的新端口
-        if [ -n "$NEW_SSH_PORT" ]; then
-            echo "$NEW_SSH_PORT"
-            return
-        fi
-        # 否则从配置文件读取
-        local port=$(grep -E "^Port\s+" /etc/ssh/sshd_config | awk '{print $2}')
-        echo "${port:-22}"
-    }
+# 在脚本末尾添加美化输出函数和最终配置总结
+print_header() {
+    echo -e "\n\033[1;34m=== $1 ===\033[0m"
+}
 
-    # 最终配置总结
-    clear
-    print_header "Backtrance 安装完成"
-    echo "安装时间: $(date '+%Y-%m-%d %H:%M:%S')"
+print_success() {
+    echo -e "\033[1;32m✓ $1\033[0m"
+}
 
-    print_header "SSH 配置信息"
-    FINAL_SSH_PORT=$(get_current_ssh_port)
-    echo "当前 SSH 配置："
-    print_info "端口: $FINAL_SSH_PORT"
-    print_info "密码认证: $(grep "^PasswordAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")"
-    check_pubkey_auth() {
-        # 1. 首先检查未注释的配置
-        local value=$(grep -E "^[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-        
-        # 2. 如果没找到,检查注释的配置
-        if [ -z "$value" ]; then
-            value=$(grep -E "^#[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-        fi
-        
-        # 3. 如果还是没找到,返回默认值
-        echo "${value:-yes}"
-    }
+print_warning() {
+    echo -e "\033[1;33m⚠ $1\033[0m"
+}
 
-    print_info "密钥认证: $(check_pubkey_auth)"
-    # Check both root and original user's SSH keys
-    ORIGINAL_USER=$(who am i | awk '{print $1}')
-    if [ -f "/root/.ssh/authorized_keys" ]; then
-        print_info "root用户已配置公钥数量: $(grep -c "^ssh-" /root/.ssh/authorized_keys)"
+print_error() {
+    echo -e "\033[1;31m✗ $1\033[0m"
+}
+
+print_info() {
+    echo -e "\033[1;36m➜ $1\033[0m"
+}
+
+# 修改获取当前 SSH 端口的函数
+get_current_ssh_port() {
+    # 优先使用脚本中设置的新端口
+    if [ -n "$NEW_SSH_PORT" ]; then
+        echo "$NEW_SSH_PORT"
+        return
     fi
-    if [ -n "$ORIGINAL_USER" ] && [ -f "/home/$ORIGINAL_USER/.ssh/authorized_keys" ]; then
-        print_info "$ORIGINAL_USER用户已配置公钥数量: $(grep -c "^ssh-" /home/$ORIGINAL_USER/.ssh/authorized_keys)"
-    fi
-    [ -n "$TEMP_KEY_FILE" ] && print_info "新生成的私钥位置: $TEMP_KEY_FILE"
+    # 否则从配置文件读取
+    local port=$(grep -E "^Port\s+" /etc/ssh/sshd_config | awk '{print $2}')
+    echo "${port:-22}"
+}
 
-    print_header "蜜罐信息"
-    print_info "Cowrie 端口: 2222"
-    print_info "安装目录: $COWRIE_INSTALL_DIR"
-    print_info "日志位置: $COWRIE_INSTALL_DIR/var/log/cowrie/"
-    if systemctl is-active --quiet cowrie; then
-        print_success "Cowrie 服务运行状态: 正常运行"
-    else
-        print_error "Cowrie 服务运行状态: 未运行"
-    fi
+# 最终配置总结
+clear
+print_header "Backtrance 安装完成"
+echo "安装时间: $(date '+%Y-%m-%d %H:%M:%S')"
 
-    print_header "Fail2ban 状态"
-    if systemctl is-active --quiet fail2ban; then
-        print_success "Fail2ban 服务: 正常运行"
-        print_info "已激活的监狱: $(fail2ban-client status | grep "Jail list" | cut -d':' -f2)"
-    else
-        print_error "Fail2ban 服务: 未运行"
+print_header "SSH 配置信息"
+FINAL_SSH_PORT=$(get_current_ssh_port)
+echo "当前 SSH 配置："
+print_info "端口: $FINAL_SSH_PORT"
+print_info "密码认证: $(grep "^PasswordAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")" 
+check_pubkey_auth() {
+    # 1. 首先检查未注释的配置
+    local value=$(grep -E "^[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+    
+    # 2. 如果没找到,检查注释的配置
+    if [ -z "$value" ]; then
+        value=$(grep -E "^#[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
     fi
+    
+    # 3. 如果还是没找到,返回默认值
+    echo "${value:-yes}"
+}
 
-    print_header "防火墙状态"
-    if command -v ufw >/dev/null 2>&1; then
-        if ufw status | grep -q "Status: active"; then
-            print_success "UFW 防火墙: 已启用"
-            echo "开放的端口:"
-            ufw status | grep -E "ALLOW" | while read -r line; do
-                if echo "$line" | grep -q "SSH"; then
-                    print_info "$line (SSH访问端口)"
-                elif echo "$line" | grep -q "Cowrie"; then
-                    print_info "$line (蜜罐端口)"
-                else
-                    print_info "$line"
-                fi
-            done
-        else
-            print_warning "UFW 防火墙: 已安装但未启用"
-            print_info "建议执行: ufw enable"
-        fi
-        
-        # 检查必要端口
-        for port in "$FINAL_SSH_PORT" "2222"; do
-            if ! ufw status | grep -q "^$port/tcp"; then
-                print_warning "端口 $port 未在防火墙中配置"
+print_info "密钥认证: $(check_pubkey_auth)"
+# Check both root and original user's SSH keys
+ORIGINAL_USER=$(who am i | awk '{print $1}')
+if [ -f "/root/.ssh/authorized_keys" ]; then
+    print_info "root用户已配置公钥数量: $(grep -c "^ssh-" /root/.ssh/authorized_keys)"
+fi
+if [ -n "$ORIGINAL_USER" ] && [ -f "/home/$ORIGINAL_USER/.ssh/authorized_keys" ]; then
+    print_info "$ORIGINAL_USER用户已配置公钥数量: $(grep -c "^ssh-" /home/$ORIGINAL_USER/.ssh/authorized_keys)"
+fi
+[ -n "$TEMP_KEY_FILE" ] && print_info "新生成的私钥位置: $TEMP_KEY_FILE"
+
+print_header "蜜罐信息"
+print_info "Cowrie 端口: 2222"
+print_info "安装目录: $COWRIE_INSTALL_DIR"
+print_info "日志位置: $COWRIE_INSTALL_DIR/var/log/cowrie/"
+if systemctl is-active --quiet cowrie; then
+    print_success "Cowrie 服务运行状态: 正常运行"
+else
+    print_error "Cowrie 服务运行状态: 未运行"
+fi
+
+print_header "Fail2ban 状态"
+if systemctl is-active --quiet fail2ban; then
+    print_success "Fail2ban 服务: 正常运行"
+    print_info "已激活的监狱: $(fail2ban-client status | grep "Jail list" | cut -d':' -f2)"
+else
+    print_error "Fail2ban 服务: 未运行"
+fi
+
+print_header "防火墙状态"
+if command -v ufw >/dev/null 2>&1; then
+    if ufw status | grep -q "Status: active"; then
+        print_success "UFW 防火墙: 已启用"
+        echo "开放的端口:"
+        ufw status | grep -E "ALLOW" | while read -r line; do
+            if echo "$line" | grep -q "SSH"; then
+                print_info "$line (SSH访问端口)"
+            elif echo "$line" | grep -q "Cowrie"; then
+                print_info "$line (蜜罐端口)"
+            else
+                print_info "$line"
             fi
         done
     else
-        print_warning "UFW 防火墙: 未安装"
-        print_info "建议执行: apt install ufw"
+        print_warning "UFW 防火墙: 已安装但未启用"
+        print_info "建议执行: ufw enable"
     fi
-
-    print_header "重要提示"
-    echo "1. 请确保记录以下信息："
-    print_info "SSH 端口: $FINAL_SSH_PORT"
-    [ -n "$TEMP_KEY_FILE" ] && print_info "SSH 私钥位置: $TEMP_KEY_FILE"
-    echo "2. 确保防火墙规则正确配置"
-    echo "3. 测试新的 SSH 配置前不要关闭当前会话"
-
-    print_header "常用命令"
-    echo "查看服务状态:"
-    print_info "systemctl status cowrie"
-    print_info "systemctl status fail2ban"
-    print_info "ufw status"
-    echo "查看日志:"
-    print_info "tail -f $COWRIE_INSTALL_DIR/var/log/cowrie/cowrie.log"
-    print_info "journalctl -u cowrie -f"
-    print_info "tail -f /var/log/fail2ban.log"
-
-    echo -e "\n\033[1;32m安装完成！如需帮助，请访问项目主页。\033[0m\n"
     
-    clear_state # 清除状态文件
+    # 检查必要端口
+    for port in "$FINAL_SSH_PORT" "2222"; do
+        if ! ufw status | grep -q "^$port/tcp"; then
+            print_warning "端口 $port 未在防火墙中配置"
+        fi
+    done
+else
+    print_warning "UFW 防火墙: 未安装"
+    print_info "建议执行: apt install ufw"
 fi
+
+print_header "重要提示"
+echo "1. 请确保记录以下信息："
+print_info "SSH 端口: $FINAL_SSH_PORT"
+[ -n "$TEMP_KEY_FILE" ] && print_info "SSH 私钥位置: $TEMP_KEY_FILE"
+echo "2. 确保防火墙规则正确配置"
+echo "3. 测试新的 SSH 配置前不要关闭当前会话"
+
+print_header "常用命令"
+echo "查看服务状态:"
+print_info "systemctl status cowrie"
+print_info "systemctl status fail2ban"
+print_info "ufw status"
+echo "查看日志:"
+print_info "tail -f $COWRIE_INSTALL_DIR/var/log/cowrie/cowrie.log"
+print_info "journalctl -u cowrie -f"
+print_info "tail -f /var/log/fail2ban.log"
+
+echo -e "\n\033[1;32m安装完成！如需帮助，请访问项目主页。\033[0m\n"
