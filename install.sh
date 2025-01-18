@@ -238,6 +238,11 @@ if [ -f "/root/.ssh/id_ed25519" ] && grep -q "^Port" /etc/ssh/sshd_config; then
     fi
 fi
 
+# 脚本开始
+if [ "$STATE" = "start" ]; then
+    save_state "ssh_config"
+fi
+
 check_installed() {
     local component="$1"
     local check_command="$2"
@@ -806,11 +811,6 @@ EOF
 systemctl daemon-reload
 systemctl enable cowrie
 systemctl start cowrie # 使用 start 而不是 restart
-
-# 脚本开始
-if [ "$STATE" = "start" ]; then
-    save_state "ssh_config"
-fi
 
 if [ "$STATE" = "ssh_config" ] && [ "$SSH_CONFIGURED" != "true" ]; then
     echo "配置 SSH..."
