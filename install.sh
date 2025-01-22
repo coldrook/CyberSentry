@@ -64,7 +64,9 @@ check_command() {
 }
 
 # 检查 ufw 是否已安装
-check_command ufw || {
+if check_command ufw; then
+    echo "ufw 已安装"
+else
     echo "ufw 未安装"
     # 提示用户是否要安装 ufw
     read -p "是否要安装 ufw？[y/N]: " INSTALL_UFW
@@ -79,7 +81,7 @@ check_command ufw || {
     else
         echo "跳过安装 ufw"
     fi
-}
+fi
 
 backup_config() {
     local config_file="$1"
