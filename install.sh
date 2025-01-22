@@ -203,6 +203,7 @@ fi
 if command -v ufw &> /dev/null; then
     echo "ufw 已安装"
 else
+    echo "ufw 未安装"
     # 提示用户是否要安装 ufw
     read -p "是否要安装 ufw？[y/N]: " INSTALL_UFW
     INSTALL_UFW=${INSTALL_UFW:-N}
