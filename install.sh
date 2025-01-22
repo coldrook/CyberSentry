@@ -55,13 +55,6 @@ apt install -y logrotate || {
     exit 1
 }
 
-# 安装 ufw
-echo "安装 ufw..."
-apt install -y ufw || {
-    echo "ufw 安装失败"
-    exit 1
-}
-
 # 函数定义
 check_command() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -206,6 +199,55 @@ if ! command -v netstat &> /dev/null; then
     echo "net-tools 安装完成"
 fi
 
+# 提示用户是否要安装 ufw
+read -p "是否要安装 ufw？[y/N]: " INSTALL_UFW
+INSTALL_UFW=${INSTALL_UFW:-N}
+
+if [[ "$INSTALL_UFW" =~ ^[Yy]$ ]]; then
+    echo "安装 ufw..."
+    apt install -y ufw || {
+        echo "ufw 安装失败"
+        exit 1
+    }
+else
+    echo "跳过安装 ufw"
+fi
+
+# 添加在环境检查部分之前提示是否要设置时区
+read -p "是否要设置时区？[y/N]: " SET_TIMEZONE
+SET_TIMEZONE=${SET_TIMEZONE:-N}
+
+if [[ "$SET_TIMEZONE" =~ ^[Yy]$ ]]; then
+    echo "请选择时区:"
+    echo "1. 上海"
+    echo "2. 新加坡"
+    read -p "请输入选项 [1/2]: " TIMEZONE_CHOICE
+    case $TIMEZONE_CHOICE in
+        1)
+            TIMEZONE="Asia/Shanghai"
+            ;;
+        2)
+            TIMEZONE="Asia/Singapore"
+            ;;
+        *)
+            echo "无效的选择，默认设置为上海时区"
+            TIMEZONE="Asia/Shanghai"
+            ;;
+    esac
+
+    echo "设置系统时区为 $TIMEZONE..."
+    if [ -f "/usr/share/zoneinfo/$TIMEZONE" ]; then
+        ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
+        echo "$TIMEZONE" > /etc/timezone
+        dpkg-reconfigure -f noninteractive tzdata
+        echo "时区已设置为 $TIMEZONE"
+    else
+        echo "警告：无法找到 $TIMEZONE 时区文件"
+    fi
+else
+    echo "跳过设置时区"
+fi
+
 # 环境检查
 for cmd in apt systemctl grep awk; do
     check_command "$cmd"
@@ -236,17 +278,6 @@ EOF
 # 在环境检查后，系统更新前添加
 echo "检查系统软件源..."
 update_sources
-
-# 添加在环境检查部分之前
-echo "设置系统时区为上海..."
-if [ -f /usr/share/zoneinfo/Asia/Shanghai ]; then
-    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-    echo "Asia/Shanghai" > /etc/timezone
-    dpkg-reconfigure -f noninteractive tzdata
-    echo "时区已设置为上海"
-else
-    echo "警告：无法找到上海时区文件"
-fi
 
 # 修改 Python 版本检测函数
 check_python_version() {
