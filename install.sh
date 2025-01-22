@@ -57,10 +57,8 @@ apt install -y logrotate || {
 
 # 函数定义
 check_command() {
-    command -v "$1" >/dev/null 2>&1 || {
-        echo "错误：未找到命 $1"
-        exit 1
-    }
+    command -v "$1" >/dev/null 2>&1
+    return $?  # 返回 command -v 的退出状态码
 }
 
 # 检查 ufw 是否已安装
@@ -82,6 +80,7 @@ else
         echo "跳过安装 ufw"
     fi
 fi
+
 
 backup_config() {
     local config_file="$1"
