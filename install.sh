@@ -218,7 +218,13 @@ else
     fi
 fi
 
-# 添加在环境检查部分之前提示是否要设置时区
+# 添加在环境检查部分之前
+# 检查当前系统时区
+CURRENT_TIMEZONE=$(cat /etc/timezone)
+
+echo "当前系统时区为: $CURRENT_TIMEZONE"
+
+# 提示是否要设置时区
 read -p "是否要设置时区？[y/N]: " SET_TIMEZONE
 SET_TIMEZONE=${SET_TIMEZONE:-N}
 
