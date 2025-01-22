@@ -55,6 +55,24 @@ apt install -y logrotate || {
     exit 1
 }
 
+# 检查 ufw 是否已安装
+check_command ufw || {
+    echo "ufw 未安装"
+    # 提示用户是否要安装 ufw
+    read -p "是否要安装 ufw？[y/N]: " INSTALL_UFW
+    INSTALL_UFW=${INSTALL_UFW:-N}
+
+    if [[ "$INSTALL_UFW" =~ ^[Yy]$ ]]; then
+        echo "安装 ufw..."
+        apt install -y ufw || {
+            echo "ufw 安装失败"
+            exit 1
+        }
+    else
+        echo "跳过安装 ufw"
+    fi
+}
+
 # 函数定义
 check_command() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -197,26 +215,6 @@ if ! command -v netstat &> /dev/null; then
         exit 1
     }
     echo "net-tools 安装完成"
-fi
-
-# 检查 ufw 是否已安装
-if command -v ufw &> /dev/null; then
-    echo "ufw 已安装"
-else
-    echo "ufw 未安装"
-    # 提示用户是否要安装 ufw
-    read -p "是否要安装 ufw？[y/N]: " INSTALL_UFW
-    INSTALL_UFW=${INSTALL_UFW:-N}
-
-    if [[ "$INSTALL_UFW" =~ ^[Yy]$ ]]; then
-        echo "安装 ufw..."
-        apt install -y ufw || {
-            echo "ufw 安装失败"
-            exit 1
-        }
-    else
-        echo "跳过安装 ufw"
-    fi
 fi
 
 # 添加在环境检查部分之前
