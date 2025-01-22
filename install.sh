@@ -15,7 +15,7 @@ set -e  # 脚本中任何命令失败都立即退出
 
 # 首先更新系统并安装基本工具
 echo "更新系统并安装基本工具..."
-apt update && apt upgrade --only-upgrade || {
+apt update || {
     echo "apt update 失败"
     exit 1
 }
@@ -278,6 +278,13 @@ EOF
 # 在环境检查后，系统更新前添加
 echo "检查系统软件源..."
 update_sources
+
+# 版本内更新
+echo "版本内更新..."
+apt upgrade --only-upgrade || {
+    echo "apt upgrade 失败"
+    exit 1
+}
 
 # 修改 Python 版本检测函数
 check_python_version() {
