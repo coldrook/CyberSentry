@@ -81,6 +81,23 @@ else
     fi
 fi
 
+# Function to check if a UFW rule exists
+check_ufw_rule() {
+    local port="$1"
+    local comment="$2"
+    
+    if ufw status | grep -q "^$port/tcp"; then
+        if [ -z "$comment" ]; then
+            return 1 # 端口存在，但没有注释
+        elif ufw status | grep -q "^$port/tcp.*$comment"; then
+            return 0 # 端口和注释都存在
+        else
+            return 2 # 端口存在，但注释不匹配
+        fi
+    else
+        return 1 # 端口不存在
+    fi
+}
 
 backup_config() {
     local config_file="$1"
@@ -768,8 +785,8 @@ if [ "$SSH_CONFIGURED" != "true" ]; then
 
     # 更新防火墙规则
     echo "更新防火墙规则..."
-    ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'
-    ufw delete allow "$CURRENT_SSH_PORT"/tcp
+    # ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'  # 移到 setup_firewall 函数中
+    # ufw delete allow "$CURRENT_SSH_PORT"/tcp # 移到 setup_firewall 函数中
 
     echo "SSH 服务已重新启动，使用新的端口: ${NEW_SSH_PORT}"
 
@@ -902,10 +919,11 @@ EOF
     # 防火墙配置
     setup_firewall() {
         echo "开始设置防火墙规则..."
-        command -v ufw >/dev/null 2>&1 || {
-            echo "未检测到 UFW 防火墙"
+        # 检查 ufw 是否安装
+        if ! check_command ufw; then
+            echo "未检测到 UFW 防火墙，跳过防火墙配置。"
             return 0
-        }
+        fi
         
         echo "检测到 UFW 防火墙..."
         
