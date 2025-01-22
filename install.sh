@@ -55,6 +55,14 @@ apt install -y logrotate || {
     exit 1
 }
 
+# 函数定义
+check_command() {
+    command -v "$1" >/dev/null 2>&1 || {
+        echo "错误：未找到命 $1"
+        exit 1
+    }
+}
+
 # 检查 ufw 是否已安装
 check_command ufw || {
     echo "ufw 未安装"
@@ -71,14 +79,6 @@ check_command ufw || {
     else
         echo "跳过安装 ufw"
     fi
-}
-
-# 函数定义
-check_command() {
-    command -v "$1" >/dev/null 2>&1 || {
-        echo "错误：未找到命 $1"
-        exit 1
-    }
 }
 
 backup_config() {
