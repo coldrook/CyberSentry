@@ -324,7 +324,7 @@ check_python_version() {
     local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     # 将版本号分解为主版本和次版本
     local required_major=3
-    local required_minor=9
+    local required_minor=10
     local current_major=$(echo $current_version | cut -d. -f1)
     local current_minor=$(echo $current_version | cut -d. -f2)
     
@@ -334,7 +334,7 @@ check_python_version() {
         echo "当前 Python 版本 ($current_version) 满足要求"
         return 0
     else
-        echo "当前 Python 版本 ($current_version) 低于要求的 3.9"
+        echo "当前 Python 版本 ($current_version) 低于要求的 3.10"
         return 1
     fi
 }
@@ -343,7 +343,7 @@ check_python_version() {
 upgrade_python() {
     local os_id=$(. /etc/os-release && echo "$ID")
     local os_version=$(. /etc/os-release && echo "$VERSION_ID")
-    local python_version="3.9" # Default to 3.11, can be changed
+    local python_version="3.10"
     local python_pkg="python${python_version}"
     local python_dev_pkg="python${python_version}-dev"
     local python_venv_pkg="python${python_version}-venv"
@@ -356,7 +356,7 @@ upgrade_python() {
                 "10")
                     echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
                     apt update
-                    apt -t buster-backports install -y python3.9 python3.9-dev python3.9-venv
+                    apt -t buster-backports install -y python3.10 python3.10-dev python3.10-venv
                     ;;
                 "11"|"12")
                     sudo apt update
@@ -421,7 +421,7 @@ if ! check_python_version; then
         echo "Python 版本升级失败"
         exit 1
     fi
-    echo "Python 已成功升级到 3.9+"
+    echo "Python 已成功升级到 3.10+"
     fix_python_deps
 fi
 
@@ -437,7 +437,7 @@ fi
 
 # 系统依赖安装和 Python 环境检查
 echo "安装依赖..."
-apt install -y fail2ban python3-virtualenv git curl netstat-nat || {
+apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-essential libpython3-dev authbind git curl netstat-nat || {
     echo "依赖安装失败，请检查系统配置"
     exit 1
 }
@@ -450,7 +450,7 @@ if ! python3 -c "import distutils" 2>/dev/null; then
 fi
 
 apt upgrade -y
-apt install -y fail2ban python3-virtualenv git curl netstat-nat
+apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-essential libpython3-dev authbind git curl netstat-nat
 
 # 添加 fail2ban 配置函数
 configure_fail2ban() {
@@ -639,31 +639,19 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     echo "准备安装目录..."
     rm -rf "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
-    
-    # 克隆仓库
-    echo "克隆 Cowrie 仓库..."
-    git clone https://github.com/cowrie/cowrie.git "$COWRIE_INSTALL_DIR" || {
-        echo "克隆 Cowrie 仓库失败"
-        exit 1
-    }
-
-    # 先用 root 执行初始化操作
-    echo "初始化 Python 环境..."
     cd "$COWRIE_INSTALL_DIR"
-    python3 -m virtualenv cowrie-env || {
+
+    # 初始化 Python 环境并按官方 operator 路径安装 Cowrie
+    echo "初始化 Python 环境..."
+    python3 -m venv cowrie-env || {
         echo "创建虚拟环境失败"
         exit 1
     }
 
-    # 激活虚拟环境并安装依赖
-    echo "安装依赖..."
+    echo "安装 Cowrie..."
     source cowrie-env/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt || {
-        echo "安装依赖失败"
-        exit 1
-    }
-    pip install -e . || {
+    python -m pip install --upgrade pip
+    python -m pip install cowrie || {
         echo "安装 Cowrie 项目失败"
         exit 1
     }
@@ -673,8 +661,6 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     if [ -x cowrie-env/bin/cowrie ]; then
         COWRIE_CMD="cowrie-env/bin/cowrie"
-    elif [ -x bin/cowrie ]; then
-        COWRIE_CMD="bin/cowrie"
     else
         echo "错误：未找到 Cowrie 可执行文件"
         exit 1
@@ -697,7 +683,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         fi
     fi
     sed -i 's/hostname = svr04/hostname = macmini/' etc/cowrie.cfg
-    sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
+    sed -i 's#^listen_endpoints = tcp:2222:interface=0.0.0.0#listen_endpoints = tcp:2222:interface=0.0.0.0#' etc/cowrie.cfg
     sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
     
     # 创建日志目录
@@ -717,8 +703,6 @@ echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
 if [ -x "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ]; then
     COWRIE_SERVICE_CMD="$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie"
-elif [ -x "$COWRIE_INSTALL_DIR/bin/cowrie" ]; then
-    COWRIE_SERVICE_CMD="$COWRIE_INSTALL_DIR/bin/cowrie"
 else
     echo "错误：未找到 Cowrie 可执行文件，无法配置服务"
     exit 1
@@ -733,7 +717,6 @@ Type=simple
 User=cowrie
 Group=cowrie
 WorkingDirectory=$COWRIE_INSTALL_DIR
-Environment="PYTHONPATH=$COWRIE_INSTALL_DIR/cowrie-env/lib/python${PYTHON_VERSION}/site-packages"
 Environment="PATH=$COWRIE_INSTALL_DIR/cowrie-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="COWRIE_STDOUT=yes"
 ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && "$COWRIE_SERVICE_CMD" start'
