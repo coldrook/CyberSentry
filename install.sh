@@ -615,7 +615,7 @@ echo "开始安装 Cowrie..."
 # Cowrie 配置部分
 echo "检查 Cowrie 安装状态..."
 COWRIE_INSTALLED=false
-if [ -d "$COWRIE_INSTALL_DIR" ] && [ -f "$COWRIE_INSTALL_DIR/bin/cowrie" ]; then
+if [ -d "$COWRIE_INSTALL_DIR" ] && { [ -x "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ] || [ -x "$COWRIE_INSTALL_DIR/bin/cowrie" ]; }; then
     echo "检测到现有 Cowrie 安装，检查完整性..."
     if [ -f "/etc/systemd/system/cowrie.service" ] && [ -d "$COWRIE_INSTALL_DIR/var/log/cowrie" ]; then
         COWRIE_INSTALLED=true
@@ -665,9 +665,18 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     }
     deactivate
 
+    if [ -x cowrie-env/bin/cowrie ]; then
+        COWRIE_CMD="cowrie-env/bin/cowrie"
+    elif [ -x bin/cowrie ]; then
+        COWRIE_CMD="bin/cowrie"
+    else
+        echo "错误：未找到 Cowrie 可执行文件"
+        exit 1
+    fi
+
     # 配置 Cowrie
     echo "配置 Cowrie..."
-    if ! bin/cowrie init; then
+    if ! "$COWRIE_CMD" init; then
         echo "Cowrie 初始化失败"
         exit 1
     fi
@@ -700,6 +709,14 @@ fi
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
 PYTHON_VERSION=$(get_python_version)
+if [ -x "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ]; then
+    COWRIE_SERVICE_CMD="$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie"
+elif [ -x "$COWRIE_INSTALL_DIR/bin/cowrie" ]; then
+    COWRIE_SERVICE_CMD="$COWRIE_INSTALL_DIR/bin/cowrie"
+else
+    echo "错误：未找到 Cowrie 可执行文件，无法配置服务"
+    exit 1
+fi
 cat <<EOF > /etc/systemd/system/cowrie.service
 [Unit]
 Description=Cowrie SSH Honeypot
@@ -712,7 +729,7 @@ Group=cowrie
 WorkingDirectory=$COWRIE_INSTALL_DIR
 Environment="PYTHONPATH=$COWRIE_INSTALL_DIR/cowrie-env/lib/python${PYTHON_VERSION}/site-packages"
 Environment="PATH=$COWRIE_INSTALL_DIR/cowrie-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && bin/cowrie start -n'
+ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && "$COWRIE_SERVICE_CMD" start -n'
 Restart=always
 RestartSec=30
 
