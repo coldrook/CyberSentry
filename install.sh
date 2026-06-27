@@ -119,10 +119,14 @@ setup_ssh_key() {
             local ssh_key_file="/root/.ssh/id_ed25519"
             ssh-keygen -t ed25519 -f "$ssh_key_file" -N ""
             cat "${ssh_key_file}.pub" >> /root/.ssh/authorized_keys
-            local temp_key_file="/tmp/ssh_key_$(date +%s).txt"
+            local key_export_dir="/root/cybersentry_keys"
+            mkdir -p "$key_export_dir"
+            chmod 700 "$key_export_dir"
+            local temp_key_file="${key_export_dir}/ssh_key_$(date +%s).txt"
             cat "$ssh_key_file" > "$temp_key_file"
             chmod 600 "$temp_key_file"
             echo "SSH 密钥已生成，私钥保存在: ${temp_key_file}"
+            echo "请下载保存后删除该私钥文件: rm -f ${temp_key_file}"
             ;;
         "import")
             read -r -p "请输入 SSH 公钥: " pubkey
@@ -139,9 +143,9 @@ setup_ssh_key() {
 
 check_installed() {
     local component="$1"
-    local check_command="$2"
+    shift
     echo "检查 $component 是否已安装..."
-    if eval "$check_command"; then
+    if "$@"; then
         echo "$component 已安装，跳过配置"
         return 0
     fi
@@ -407,12 +411,18 @@ EOF
 echo "检查系统软件源..."
 update_sources
 
-# 版本内更新
-echo "版本内更新..."
-apt upgrade --only-upgrade || {
-    echo "apt upgrade 失败"
-    exit 1
-}
+# 版本内更新（默认跳过，避免安装脚本引入不可控系统变更）
+read -r -p "是否执行系统包版本内升级 apt upgrade --only-upgrade？[y/N]: " RUN_APT_UPGRADE
+RUN_APT_UPGRADE=${RUN_APT_UPGRADE:-N}
+if [[ "$RUN_APT_UPGRADE" =~ ^[Yy]$ ]]; then
+    echo "执行版本内更新..."
+    apt upgrade --only-upgrade || {
+        echo "apt upgrade 失败"
+        exit 1
+    }
+else
+    echo "跳过系统包版本内升级"
+fi
 
 # 检查 Python 版本要求（Cowrie 最新版要求 Python >= 3.10）
 COWRIE_PYTHON_BIN="python3"
@@ -532,8 +542,7 @@ apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-ess
     exit 1
 }
 
-apt upgrade -y
-apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-essential libpython3-dev authbind git curl netstat-nat
+# 依赖已在上一步安装；不在此处无条件执行 apt upgrade。
 
 # 添加 fail2ban 配置函数
 configure_fail2ban() {
@@ -721,7 +730,11 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 准备目录
     echo "准备安装目录..."
-    rm -rf "$COWRIE_INSTALL_DIR"
+    if [ -z "$COWRIE_INSTALL_DIR" ] || [ "$COWRIE_INSTALL_DIR" = "/" ] || [ "$COWRIE_INSTALL_DIR" = "/opt" ]; then
+        echo "错误：Cowrie 安装目录不安全: ${COWRIE_INSTALL_DIR:-空}"
+        exit 1
+    fi
+    rm -rf -- "$COWRIE_INSTALL_DIR"
     mkdir -p "$COWRIE_INSTALL_DIR"
     cd "$COWRIE_INSTALL_DIR"
 
@@ -776,7 +789,9 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     # 最后设置权限
     echo "设置权限..."
     chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
-    chmod -R 755 "$COWRIE_INSTALL_DIR"
+    find "$COWRIE_INSTALL_DIR" -type d -exec chmod 750 {} \;
+    find "$COWRIE_INSTALL_DIR" -type f -exec chmod 640 {} \;
+    find "$COWRIE_INSTALL_DIR/cowrie-env/bin" -type f -exec chmod 750 {} \; 2>/dev/null || true
     chmod 700 "$COWRIE_INSTALL_DIR/var/log/cowrie"
 
     echo "Cowrie 基础安装完成"
@@ -805,6 +820,11 @@ Environment="COWRIE_STDOUT=yes"
 ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && "$COWRIE_SERVICE_CMD" start'
 Restart=always
 RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=$COWRIE_INSTALL_DIR
 
 [Install]
 WantedBy=multi-user.target
@@ -1216,8 +1236,15 @@ EOF
         return 0
     }
 
-    # 调用防火墙配置函数并确保继续执行
-    setup_firewall || true
+    # 调用防火墙配置函数；失败时由用户决定是否继续
+    if ! setup_firewall; then
+        echo "警告：防火墙配置失败，可能导致 SSH 或 Cowrie 端口不可达。"
+        read -r -p "是否仍然继续？[y/N]: " CONTINUE_AFTER_UFW_ERROR
+        if [[ ! "$CONTINUE_AFTER_UFW_ERROR" =~ ^[Yy]$ ]]; then
+            echo "已停止。请检查防火墙配置后重新运行脚本。"
+            exit 1
+        fi
+    fi
     echo "继续执行后续配置..."
 
     # SSH 已在前面的新会话验证步骤中应用并确认；这里不再重复重启，避免覆盖已验证状态。
