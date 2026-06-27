@@ -148,13 +148,6 @@ check_installed() {
     return 1
 }
 
-# 添加 Python 版本检测函数（在函数定义部分）
-get_python_version() {
-    local py_version
-    py_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    echo "$py_version"
-}
-
 # 修改防火墙规则检查函数
 check_ufw_rule() {
     local port="$1"
@@ -688,7 +681,6 @@ fi
 
 # 配置 Cowrie 服务
 echo "配置 Cowrie 服务..."
-PYTHON_VERSION=$(get_python_version)
 if [ -x "$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie" ]; then
     COWRIE_SERVICE_CMD="$COWRIE_INSTALL_DIR/cowrie-env/bin/cowrie"
 else
@@ -716,9 +708,21 @@ WantedBy=multi-user.target
 EOF
 
 # 重载并启动服务
-systemctl daemon-reload
-systemctl enable cowrie
-systemctl start cowrie
+systemctl daemon-reload || {
+    echo "错误：systemd 配置重载失败"
+    exit 1
+}
+systemctl enable cowrie || {
+    echo "错误：Cowrie 服务启用失败"
+    exit 1
+}
+if ! systemctl restart cowrie; then
+    echo "错误：Cowrie 服务启动失败，最近日志如下："
+    systemctl status cowrie --no-pager || true
+    journalctl -u cowrie --no-pager -n 80 || true
+    exit 1
+fi
+echo "Cowrie 服务已启动"
 
 # SSH 安全配置
 echo "检查 SSH 配置..."
