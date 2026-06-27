@@ -735,7 +735,8 @@ Group=cowrie
 WorkingDirectory=$COWRIE_INSTALL_DIR
 Environment="PYTHONPATH=$COWRIE_INSTALL_DIR/cowrie-env/lib/python${PYTHON_VERSION}/site-packages"
 Environment="PATH=$COWRIE_INSTALL_DIR/cowrie-env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && "$COWRIE_SERVICE_CMD" start -n'
+Environment="COWRIE_STDOUT=yes"
+ExecStart=/bin/bash -c 'cd $COWRIE_INSTALL_DIR && source cowrie-env/bin/activate && "$COWRIE_SERVICE_CMD" start'
 Restart=always
 RestartSec=30
 
