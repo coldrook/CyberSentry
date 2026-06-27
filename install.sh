@@ -662,7 +662,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 配置 Cowrie
     echo "配置 Cowrie..."
-    cp etc/cowrie.cfg.dist etc/cowrie.cfg
+    bin/cowrie init
+    [ -f etc/cowrie.cfg ] || cp src/cowrie/data/etc/cowrie.cfg.dist etc/cowrie.cfg
     sed -i 's/hostname = svr04/hostname = macmini/' etc/cowrie.cfg
     sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
     sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
