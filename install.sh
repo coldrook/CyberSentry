@@ -222,6 +222,11 @@ COWRIE_INSTALL_DIR="/opt/cowrie"
 LOG_RETENTION_DAYS=30
 CLEANUP_LOG_SCRIPT="/usr/local/bin/cleanup_logs.sh"
 CRON_SCHEDULE="0 2 * * *"  # 修正 cron 表达式
+SSH_CONFIGURED=false
+NEW_SSH_PORT=""
+AUTH_CHOICE=0
+SETUP_UFW=n
+TEMP_KEY_FILE=""
 
 # 在开始时先检查并安装 net-tools
 echo "检查 netstat 命令..."
@@ -662,8 +667,20 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 配置 Cowrie
     echo "配置 Cowrie..."
-    bin/cowrie init
-    [ -f etc/cowrie.cfg ] || cp src/cowrie/data/etc/cowrie.cfg.dist etc/cowrie.cfg
+    if ! bin/cowrie init; then
+        echo "Cowrie 初始化失败"
+        exit 1
+    fi
+    if [ ! -f etc/cowrie.cfg ]; then
+        if [ -f src/cowrie/data/etc/cowrie.cfg.dist ]; then
+            cp src/cowrie/data/etc/cowrie.cfg.dist etc/cowrie.cfg
+        elif [ -f etc/cowrie.cfg.dist ]; then
+            cp etc/cowrie.cfg.dist etc/cowrie.cfg
+        else
+            echo "未找到 Cowrie 配置模板 cowrie.cfg.dist"
+            exit 1
+        fi
+    fi
     sed -i 's/hostname = svr04/hostname = macmini/' etc/cowrie.cfg
     sed -i 's/^#listen_port=2222/listen_port=2222/' etc/cowrie.cfg
     sed -i 's/^#download_limit_size=10485760/download_limit_size=1048576/' etc/cowrie.cfg
@@ -991,7 +1008,7 @@ EOF
                 ufw --force enable
                 echo "防火墙已启用"
             else
-                print_warning "警告：防火墙未启用，请确保手动配置以下规则："
+                echo "警告：防火墙未启用，请确保手动配置以下规则："
                 echo "- SSH 端口: $NEW_SSH_PORT/tcp"
                 echo "- 蜜罐端口: 2222/tcp"
                 [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] && [ "$KEEP_OLD_PORT" != "n" ] && echo "- 原 SSH 端口: $CURRENT_SSH_PORT/tcp"
@@ -1022,7 +1039,7 @@ EOF
     echo "SSH 配置状态："
     [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] && echo "- SSH 端口已更改为: ${NEW_SSH_PORT}"
     [ "$AUTH_CHOICE" != "0" ] && echo "- SSH 认证配置已更新"
-    [ "$SETUP_UFW" = "y" ] && echo "- 防火墙规则已更新"
+    [ "${SETUP_UFW:-n}" = "y" ] && echo "- 防火墙规则已更新"
     echo "=========================="
 fi
 
@@ -1148,7 +1165,7 @@ fi
 if [ -n "$ORIGINAL_USER" ] && [ -f "/home/$ORIGINAL_USER/.ssh/authorized_keys" ]; then
     print_info "$ORIGINAL_USER用户已配置公钥数量: $(grep -c "^ssh-" /home/$ORIGINAL_USER/.ssh/authorized_keys)"
 fi
-[ -n "$TEMP_KEY_FILE" ] && print_info "新生成的私钥位置: $TEMP_KEY_FILE"
+[ -n "${TEMP_KEY_FILE:-}" ] && print_info "新生成的私钥位置: $TEMP_KEY_FILE"
 
 print_header "蜜罐信息"
 print_info "Cowrie 端口: 2222"
@@ -1201,7 +1218,7 @@ fi
 print_header "重要提示"
 echo "1. 请确保记录以下信息："
 print_info "SSH 端口: $FINAL_SSH_PORT"
-[ -n "$TEMP_KEY_FILE" ] && print_info "SSH 私钥位置: $TEMP_KEY_FILE"
+[ -n "${TEMP_KEY_FILE:-}" ] && print_info "SSH 私钥位置: $TEMP_KEY_FILE"
 echo "2. 确保防火墙规则正确配置"
 echo "3. 测试新的 SSH 配置前不要关闭当前会话"
 
