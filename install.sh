@@ -334,7 +334,7 @@ check_python_version() {
 
     echo "当前 Python 版本 ($current_version) 低于 Cowrie 要求的 3.10"
     echo "请先将系统默认 python3 升级到 3.10+ 后再运行本脚本。"
-    echo "为避免破坏 apt/python3-apt，本脚本不会自动安装多版本 Python 或修改 update-alternatives。"
+    echo "为避免破坏 apt/python3-apt，本脚本不会自动安装多版本 Python 或修改系统 python3 指向。"
     return 1
 }
 
