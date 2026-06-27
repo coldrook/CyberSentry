@@ -970,6 +970,35 @@ EOF
                 exit 1
             fi
 
+            echo "SSH 密钥配置："
+            echo "0) 保持现有密钥"
+            echo "1) 使用新的公钥"
+            echo "2) 自动生成新密钥对"
+            read -p "请选择 [0/1/2] (默认: 0): " KEY_CHOICE
+            KEY_CHOICE=${KEY_CHOICE:-0}
+
+            case $KEY_CHOICE in
+                0)
+                    echo "保持现有密钥配置"
+                    ;;
+                1)
+                    setup_ssh_key "import"
+                    ;;
+                2)
+                    echo "生成新的密钥对..."
+                    echo "注意：这将覆盖现有的 /root/.ssh/id_ed25519"
+                    read -p "是否继续？[y/N]: " CONFIRM
+                    if [[ $CONFIRM =~ ^[Yy]$ ]]; then
+                        setup_ssh_key "generate"
+                    else
+                        echo "取消生成新密钥"
+                    fi
+                    ;;
+                *)
+                    echo "无效的选择！保持现有密钥配置"
+                    ;;
+            esac
+
             systemctl restart ssh
             echo "SSH 配置更新完成：允许密码和密钥认证"
             ;;
