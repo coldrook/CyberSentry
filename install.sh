@@ -543,7 +543,7 @@ configure_fail2ban() {
     if [ -f /etc/fail2ban/jail.local ]; then
         echo "当前 fail2ban 配置摘要:"
         echo "------------------------"
-        grep -E "^(bantime|findtime|maxretry|action)" /etc/fail2ban/jail.local
+        grep -E "^(bantime|findtime|maxretry|action|allowipv6)" /etc/fail2ban/jail.local
         echo "------------------------"
     fi
 
@@ -571,6 +571,7 @@ configure_fail2ban() {
     if ! cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 ignoreip = 127.0.0.1/8 ::1
+allowipv6 = auto
 bantime = 86400
 findtime = 1800
 backend = $BACKEND  
@@ -654,7 +655,7 @@ if systemctl is-active --quiet fail2ban; then
     if [ -f /etc/fail2ban/jail.local ]; then
         echo "当前 fail2ban 配置摘要:"
         echo "------------------------"
-        grep -E "^(bantime|findtime|maxretry|action)" /etc/fail2ban/jail.local || echo "未找到关键配置"
+        grep -E "^(bantime|findtime|maxretry|action|allowipv6)" /etc/fail2ban/jail.local || echo "未找到关键配置"
         echo "------------------------"
     else
         echo "未检测到自定义配置文件"
