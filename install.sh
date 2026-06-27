@@ -148,6 +148,100 @@ check_installed() {
     return 1
 }
 
+restart_ssh_service() {
+    if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; then
+        return 0
+    fi
+    systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null
+}
+
+print_ssh_diagnostics() {
+    local port="$1"
+    echo "SSH 诊断信息："
+    sshd -T -C user=root,host=localhost,addr=127.0.0.1 2>/dev/null | grep -E '^(port|passwordauthentication|permitrootlogin|pubkeyauthentication|kbdinteractiveauthentication|challengeresponseauthentication|usepam|authenticationmethods|allowusers|denyusers|allowgroups|denygroups) ' || true
+    if command -v ss >/dev/null 2>&1; then
+        ss -tlnp | grep ":${port} " || true
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -tlnp 2>/dev/null | grep ":${port} " || true
+    fi
+    journalctl -u ssh --no-pager -n 40 2>/dev/null || journalctl -u sshd --no-pager -n 40 2>/dev/null || true
+}
+
+test_ssh_tcp_port() {
+    local port="$1"
+    if command -v nc >/dev/null 2>&1; then
+        timeout 5 nc -z 127.0.0.1 "$port"
+        return $?
+    fi
+    timeout 5 bash -c "</dev/tcp/127.0.0.1/$port" >/dev/null 2>&1
+}
+
+test_ssh_key_login() {
+    local port="$1"
+    local key_file="${2:-}"
+    [ -n "$key_file" ] && [ -f "$key_file" ] || return 2
+    ssh -o BatchMode=yes         -o ConnectTimeout=8         -o StrictHostKeyChecking=no         -o UserKnownHostsFile=/dev/null         -o PreferredAuthentications=publickey         -i "$key_file"         -p "$port" root@127.0.0.1 'echo SSH_KEY_LOGIN_OK' >/dev/null 2>&1
+}
+
+verify_ssh_new_session() {
+    local port="$1"
+    local auth_choice="${2:-0}"
+    local key_file="${3:-}"
+
+    echo "验证 SSH 新会话可用性..."
+    if ! sshd -t; then
+        echo "错误：SSH 配置语法检查失败，未继续。"
+        return 1
+    fi
+
+    restart_ssh_service || {
+        echo "错误：SSH 服务重载/重启失败。"
+        print_ssh_diagnostics "$port"
+        return 1
+    }
+
+    if ! test_ssh_tcp_port "$port"; then
+        echo "错误：无法连接到本机 SSH 新端口 127.0.0.1:${port}。"
+        print_ssh_diagnostics "$port"
+        return 1
+    fi
+    echo "SSH 新端口监听正常：127.0.0.1:${port}"
+
+    if [ "$auth_choice" = "1" ] || [ "$auth_choice" = "2" ]; then
+        if [ -n "$key_file" ] && [ -f "$key_file" ]; then
+            if test_ssh_key_login "$port" "$key_file"; then
+                echo "SSH 密钥新会话测试通过。"
+            else
+                echo "警告：SSH 密钥新会话自动测试失败。"
+                print_ssh_diagnostics "$port"
+                return 1
+            fi
+        else
+            echo "未找到可用于自动测试的本机私钥，无法自动验证密钥登录。"
+            echo "请现在用 WinSCP/Xshell 新建密钥会话测试：root@服务器IP:${port}。"
+            read -r -p "密钥新会话是否已成功登录？[y/N]: " SSH_KEY_MANUAL_OK
+            if [[ ! "$SSH_KEY_MANUAL_OK" =~ ^[Yy]$ ]]; then
+                echo "未确认密钥新会话成功登录，脚本停止以避免锁死。当前已登录会话仍可用于修复。"
+                print_ssh_diagnostics "$port"
+                return 1
+            fi
+        fi
+    fi
+
+    if [ "$auth_choice" = "2" ]; then
+        echo "密码登录已启用；脚本无法安全保存明文密码进行自动登录测试。"
+        echo "请现在用 WinSCP/Xshell 新建密码会话测试：root@服务器IP:${port}。"
+        read -r -p "密码新会话是否已成功登录？[y/N]: " SSH_PASSWORD_MANUAL_OK
+        if [[ ! "$SSH_PASSWORD_MANUAL_OK" =~ ^[Yy]$ ]]; then
+            echo "未确认密码新会话成功登录，脚本停止以避免锁死。当前已登录会话仍可用于修复。"
+            print_ssh_diagnostics "$port"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
 # 修改防火墙规则检查函数
 check_ufw_rule() {
     local port="$1"
@@ -796,16 +890,27 @@ if [ "$SSH_CONFIGURED" != "true" ]; then
     # 更新 SSH 配置文件
     sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
 
-    # 重新启动 SSH 服务
-    echo "重新启动 SSH 服务..."
-    systemctl restart ssh
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+        echo "临时放行新的 SSH 端口 ${NEW_SSH_PORT}，旧端口会在新会话确认后再处理。"
+        ufw allow "${NEW_SSH_PORT}"/tcp comment 'SSH' || true
+    fi
 
-    # 更新防火墙规则
-    echo "更新防火墙规则..."
-    # ufw allow "$NEW_SSH_PORT"/tcp comment 'SSH'  # 移到 setup_firewall 函数中
-    # ufw delete allow "$CURRENT_SSH_PORT"/tcp # 移到 setup_firewall 函数中
+    echo "测试并应用 SSH 端口配置..."
+    if ! verify_ssh_new_session "$NEW_SSH_PORT" "0" ""; then
+        echo "SSH 端口配置测试失败，请检查上方诊断信息。"
+        exit 1
+    fi
 
-    echo "SSH 服务已重新启动，使用新的端口: ${NEW_SSH_PORT}"
+    echo "SSH 新端口已通过本机新连接测试: ${NEW_SSH_PORT}"
+    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
+        echo "请保持当前会话不关闭，并立即用 WinSCP/Xshell 新建会话测试新端口：root@服务器IP:${NEW_SSH_PORT}。"
+        read -r -p "新端口会话是否已成功登录？[y/N]: " SSH_PORT_MANUAL_OK
+        if [[ ! "$SSH_PORT_MANUAL_OK" =~ ^[Yy]$ ]]; then
+            echo "未确认新端口会话成功登录，脚本停止以避免锁死。当前已登录会话仍可用于修复。"
+            print_ssh_diagnostics "$NEW_SSH_PORT"
+            exit 1
+        fi
+    fi
 
     # SSH 认证配置
     echo "SSH 认证配置："
@@ -890,35 +995,21 @@ EOF
                 fi
             fi
 
-            echo "测试 SSH 配置..."
-            if ! sshd -t; then
-                echo "SSH 配置测试失败，恢复默认配置"
-                mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                systemctl restart sshd
+            SSH_TEST_KEY_FILE=""
+            if [ -f /root/.ssh/id_ed25519 ]; then
+                SSH_TEST_KEY_FILE="/root/.ssh/id_ed25519"
+            elif [ -f /root/.ssh/id_rsa ]; then
+                SSH_TEST_KEY_FILE="/root/.ssh/id_rsa"
+            fi
+
+            echo "应用并验证新的 SSH 配置..."
+            if ! verify_ssh_new_session "$NEW_SSH_PORT" "1" "$SSH_TEST_KEY_FILE"; then
+                echo "SSH 密钥认证新会话测试失败，停止脚本以避免锁死。"
                 exit 1
             fi
 
-            echo "应用新的 SSH 配置..."
-            systemctl restart ssh
-
-            # 验证配置
-            echo "验证 SSH 配置..."
-            if grep -q "^PasswordAuthentication yes" /etc/ssh/sshd_config || \
-               ! grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config || \
-               ! grep -q "^PubkeyAuthentication yes" /etc/ssh/sshd_config || \
-               ! grep -q "^AuthenticationMethods publickey" /etc/ssh/sshd_config; then
-                echo "警告：SSH 配置可能未正确应用"
-                echo "当前 SSH 配置状态："
-                grep -E "^(PasswordAuthentication|PubkeyAuthentication|AuthenticationMethods)" /etc/ssh/sshd_config
-                echo "是否继续？[y/N]: "
-                read -r CONTINUE
-                if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
-                    echo "恢复原始配置..."
-                    mv /etc/ssh/sshd_config.bak.$(date +%s) /etc/ssh/sshd_config
-                    systemctl restart ssh
-                    exit 1
-                fi
-            fi
+            echo "SSH 有效认证配置："
+            sshd -T -C user=root,host=localhost,addr=127.0.0.1 | grep -E '^(passwordauthentication|pubkeyauthentication|authenticationmethods|permitrootlogin) ' || true
 
             echo "SSH 配置更新完成：仅允许密钥认证"
             ;;
@@ -1007,7 +1098,17 @@ EOF
                     ;;
             esac
 
-            systemctl restart ssh
+            SSH_TEST_KEY_FILE=""
+            if [ -f /root/.ssh/id_ed25519 ]; then
+                SSH_TEST_KEY_FILE="/root/.ssh/id_ed25519"
+            elif [ -f /root/.ssh/id_rsa ]; then
+                SSH_TEST_KEY_FILE="/root/.ssh/id_rsa"
+            fi
+
+            if ! verify_ssh_new_session "$NEW_SSH_PORT" "2" "$SSH_TEST_KEY_FILE"; then
+                echo "SSH 密码/密钥认证新会话测试失败，停止脚本以避免锁死。"
+                exit 1
+            fi
             echo "SSH 配置更新完成：允许密码和密钥认证"
             ;;
         *)
@@ -1108,14 +1209,7 @@ EOF
     setup_firewall || true
     echo "继续执行后续配置..."
 
-    # 如果端口已更改，则更新 SSH 配置
-    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ]; then
-        sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
-    fi
-
-    if [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] || [ "$AUTH_CHOICE" != "0" ]; then
-        systemctl restart ssh
-    fi
+    # SSH 已在前面的新会话验证步骤中应用并确认；这里不再重复重启，避免覆盖已验证状态。
 
     echo "SSH 配置状态："
     [ "$NEW_SSH_PORT" != "$CURRENT_SSH_PORT" ] && echo "- SSH 端口已更改为: ${NEW_SSH_PORT}"
