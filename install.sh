@@ -931,10 +931,47 @@ EOF
             echo "SSH 配置更新完成：仅允许密钥认证"
             ;;
         2)
-            # 启用密码和密钥认证
-            sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            echo "配置同时启用密码和密钥认证..."
+            backup_with_timestamp "/etc/ssh/sshd_config" 3
+
+            SSH_CONFIG_FILES=(/etc/ssh/sshd_config)
+            if compgen -G "/etc/ssh/sshd_config.d/*.conf" >/dev/null; then
+                SSH_CONFIG_FILES+=(/etc/ssh/sshd_config.d/*.conf)
+            fi
+            for ssh_config_file in "${SSH_CONFIG_FILES[@]}"; do
+                [ -f "$ssh_config_file" ] || continue
+                sed -i '/^[[:space:]]*#\?[[:space:]]*PasswordAuthentication[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*PubkeyAuthentication[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*KbdInteractiveAuthentication[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*ChallengeResponseAuthentication[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*AuthenticationMethods[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*UsePAM[[:space:]]/d' "$ssh_config_file"
+                sed -i '/^[[:space:]]*#\?[[:space:]]*PermitRootLogin[[:space:]]/d' "$ssh_config_file"
+            done
+
+            cat > /etc/ssh/sshd_config.d/99-cybersentry-auth.conf <<EOF
+# CyberSentry 认证配置 - $(date '+%Y-%m-%d %H:%M:%S')
+PasswordAuthentication yes
+PubkeyAuthentication yes
+KbdInteractiveAuthentication yes
+ChallengeResponseAuthentication yes
+UsePAM yes
+PermitRootLogin yes
+EOF
+
+            echo "测试 SSH 配置..."
+            if ! sshd -t; then
+                echo "SSH 配置测试失败，恢复备份"
+                LATEST_BACKUP=$(find /root/config_backups -name "sshd_config*.bak" -print0 | xargs -0 ls -1t | head -n 1)
+                if [ -n "$LATEST_BACKUP" ]; then
+                    cp "$LATEST_BACKUP" /etc/ssh/sshd_config
+                    systemctl restart sshd || systemctl restart ssh
+                fi
+                exit 1
+            fi
+
+            systemctl restart ssh
+            echo "SSH 配置更新完成：允许密码和密钥认证"
             ;;
         *)
             echo "无效的选择！保持当前认证配置"
@@ -1149,17 +1186,14 @@ print_header "SSH 配置信息"
 FINAL_SSH_PORT=$(get_current_ssh_port)
 echo "当前 SSH 配置："
 print_info "端口: $FINAL_SSH_PORT"
-print_info "密码认证: $(grep "^PasswordAuthentication" /etc/ssh/sshd_config | awk '{print $2}' || echo "yes")" 
+check_password_auth() {
+    local value=$(sshd -T 2>/dev/null | awk '$1 == "passwordauthentication" {print $2; exit}')
+    echo "${value:-yes}"
+}
+
+print_info "密码认证: $(check_password_auth)"
 check_pubkey_auth() {
-    # 1. 首先检查未注释的配置
-    local value=$(grep -E "^[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    
-    # 2. 如果没找到,检查注释的配置
-    if [ -z "$value" ]; then
-        value=$(grep -E "^#[[:space:]]*PubkeyAuthentication[[:space:]]+" /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
-    fi
-    
-    # 3. 如果还是没找到,返回默认值
+    local value=$(sshd -T 2>/dev/null | awk '$1 == "pubkeyauthentication" {print $2; exit}')
     echo "${value:-yes}"
 }
 
