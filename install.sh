@@ -669,6 +669,8 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
     }
     deactivate
 
+    chown -R cowrie:cowrie "$COWRIE_INSTALL_DIR"
+
     if [ -x cowrie-env/bin/cowrie ]; then
         COWRIE_CMD="cowrie-env/bin/cowrie"
     elif [ -x bin/cowrie ]; then
@@ -680,7 +682,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 配置 Cowrie
     echo "配置 Cowrie..."
-    if ! "$COWRIE_CMD" init; then
+    if ! runuser -u cowrie -- "$COWRIE_CMD" init; then
         echo "Cowrie 初始化失败"
         exit 1
     fi
