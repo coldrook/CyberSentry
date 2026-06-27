@@ -663,6 +663,10 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
         echo "安装依赖失败"
         exit 1
     }
+    pip install -e . || {
+        echo "安装 Cowrie 项目失败"
+        exit 1
+    }
     deactivate
 
     if [ -x cowrie-env/bin/cowrie ]; then
