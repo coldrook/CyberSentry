@@ -970,6 +970,22 @@ EOF
                 exit 1
             fi
 
+            echo "检查 root 密码状态..."
+            ROOT_PASS_STATUS=$(passwd -S root 2>/dev/null | awk '{print $2}')
+            if [ "$ROOT_PASS_STATUS" = "L" ] || [ "$ROOT_PASS_STATUS" = "NP" ]; then
+                echo "警告：root 密码当前可能被锁定或未设置，密码登录仍会失败。"
+            fi
+            read -p "是否现在设置/重置 root 密码以启用密码登录？[y/N]: " SET_ROOT_PASSWORD
+            SET_ROOT_PASSWORD=${SET_ROOT_PASSWORD:-N}
+            if [[ "$SET_ROOT_PASSWORD" =~ ^[Yy]$ ]]; then
+                passwd root || {
+                    echo "设置 root 密码失败"
+                    exit 1
+                }
+            else
+                echo "跳过设置 root 密码；请确认 root 密码已存在且未锁定。"
+            fi
+
             echo "SSH 密钥配置："
             echo "0) 保持现有密钥"
             echo "1) 使用新的公钥"
