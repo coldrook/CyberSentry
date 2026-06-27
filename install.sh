@@ -320,26 +320,105 @@ apt upgrade --only-upgrade || {
 }
 
 # 检查 Python 版本要求（Cowrie 最新版要求 Python >= 3.10）
-check_python_version() {
-    local current_major
-    local current_minor
-    current_major=$(python3 -c 'import sys; print(sys.version_info.major)')
-    current_minor=$(python3 -c 'import sys; print(sys.version_info.minor)')
-    local current_version="${current_major}.${current_minor}"
+COWRIE_PYTHON_BIN="python3"
+COWRIE_PYTHON_VERSION=""
 
-    if [ "$current_major" -gt 3 ] || { [ "$current_major" -eq 3 ] && [ "$current_minor" -ge 10 ]; }; then
+python_version_ge_310() {
+    local python_bin="$1"
+    "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null
+}
+
+get_python_version() {
+    local python_bin="$1"
+    "$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null
+}
+
+find_latest_available_python() {
+    local version
+    for version in 3.13 3.12 3.11 3.10; do
+        if command -v "python${version}" >/dev/null 2>&1 && python_version_ge_310 "python${version}"; then
+            echo "python${version}"
+            return 0
+        fi
+    done
+
+    apt update
+    for version in 3.13 3.12 3.11 3.10; do
+        if apt-cache show "python${version}" >/dev/null 2>&1; then
+            echo "python${version}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+install_selected_python() {
+    local python_pkg="$1"
+    local version="${python_pkg#python}"
+    echo "准备安装 ${python_pkg} 及 Cowrie 所需构建组件..."
+    apt install -y "${python_pkg}" "${python_pkg}-venv" "${python_pkg}-dev" python3-pip libssl-dev libffi-dev build-essential authbind || {
+        echo "${python_pkg} 安装失败，请手动安装 Python 3.10+ 后重试。"
+        exit 1
+    }
+
+    if ! command -v "$python_pkg" >/dev/null 2>&1 || ! python_version_ge_310 "$python_pkg"; then
+        echo "安装后仍无法使用 ${python_pkg}，请手动检查系统软件源。"
+        exit 1
+    fi
+
+    COWRIE_PYTHON_BIN="$python_pkg"
+    COWRIE_PYTHON_VERSION="$version"
+}
+
+check_python_version() {
+    local current_version
+    current_version=$(get_python_version python3 || true)
+
+    if [ -n "$current_version" ] && python_version_ge_310 python3; then
+        COWRIE_PYTHON_BIN="python3"
+        COWRIE_PYTHON_VERSION="$current_version"
         echo "当前 Python 版本 ($current_version) 满足 Cowrie 要求"
         return 0
     fi
 
-    echo "当前 Python 版本 ($current_version) 低于 Cowrie 要求的 3.10"
-    echo "请先将系统默认 python3 升级到 3.10+ 后再运行本脚本。"
-    echo "为避免破坏 apt/python3-apt，本脚本不会自动安装多版本 Python 或修改系统 python3 指向。"
-    return 1
+    echo "当前 Python 版本 (${current_version:-未检测到}) 低于 Cowrie 要求的 3.10"
+    echo "正在检测系统软件源中可用的最新 Python 3.10+ 版本..."
+
+    local latest_python
+    if ! latest_python=$(find_latest_available_python); then
+        echo "未在当前系统软件源中找到 Python 3.10+。"
+        echo "请先升级系统发行版或配置官方可信软件源后重新运行脚本。"
+        exit 1
+    fi
+
+    local latest_version="${latest_python#python}"
+    echo "检测到可用版本：${latest_python} (${latest_version})"
+    echo "请选择处理方式："
+    echo "1) 退出脚本，手动安装 Python 3.10+"
+    echo "2) 由脚本安装 ${latest_python} 并使用它创建 Cowrie 虚拟环境"
+
+    local python_choice
+    while true; do
+        read -r -p "请输入选项 [1-2]: " python_choice
+        case "$python_choice" in
+            1)
+                echo "已退出。请手动安装 Python 3.10+ 后重新运行脚本。"
+                exit 1
+                ;;
+            2)
+                install_selected_python "$latest_python"
+                return 0
+                ;;
+            *)
+                echo "无效选择，请输入 1 或 2"
+                ;;
+        esac
+    done
 }
 
 echo "检查 Python 版本要求..."
-check_python_version || exit 1
+check_python_version
 
 # 检查 netstat 命令
 if ! command -v netstat &> /dev/null; then
@@ -552,7 +631,7 @@ if [ "$COWRIE_INSTALLED" = "false" ]; then
 
     # 初始化 Python 环境并按官方 operator 路径安装 Cowrie
     echo "初始化 Python 环境..."
-    python3 -m venv cowrie-env || {
+    "$COWRIE_PYTHON_BIN" -m venv cowrie-env || {
         echo "创建虚拟环境失败"
         exit 1
     }
