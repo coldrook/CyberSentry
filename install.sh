@@ -319,111 +319,27 @@ apt upgrade --only-upgrade || {
     exit 1
 }
 
-# 修改 Python 版本检测函数
+# 检查 Python 版本要求（Cowrie 最新版要求 Python >= 3.10）
 check_python_version() {
-    local current_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    # 将版本号分解为主版本和次版本
-    local required_major=3
-    local required_minor=10
-    local current_major=$(echo $current_version | cut -d. -f1)
-    local current_minor=$(echo $current_version | cut -d. -f2)
-    
-    # 先比较主版本，如果主版本相同则比较次版本
-    if [ "$current_major" -gt "$required_major" ] || 
-       ([ "$current_major" -eq "$required_major" ] && [ "$current_minor" -ge "$required_minor" ]); then
-        echo "当前 Python 版本 ($current_version) 满足要求"
+    local current_major
+    local current_minor
+    current_major=$(python3 -c 'import sys; print(sys.version_info.major)')
+    current_minor=$(python3 -c 'import sys; print(sys.version_info.minor)')
+    local current_version="${current_major}.${current_minor}"
+
+    if [ "$current_major" -gt 3 ] || { [ "$current_major" -eq 3 ] && [ "$current_minor" -ge 10 ]; }; then
+        echo "当前 Python 版本 ($current_version) 满足 Cowrie 要求"
         return 0
-    else
-        echo "当前 Python 版本 ($current_version) 低于要求的 3.10"
-        return 1
     fi
+
+    echo "当前 Python 版本 ($current_version) 低于 Cowrie 要求的 3.10"
+    echo "请先将系统默认 python3 升级到 3.10+ 后再运行本脚本。"
+    echo "为避免破坏 apt/python3-apt，本脚本不会自动安装多版本 Python 或修改 update-alternatives。"
+    return 1
 }
 
-# 添加 Python 升级函数
-upgrade_python() {
-    local os_id=$(. /etc/os-release && echo "$ID")
-    local os_version=$(. /etc/os-release && echo "$VERSION_ID")
-    local python_version="3.10"
-    local python_pkg="python${python_version}"
-    local python_dev_pkg="python${python_version}-dev"
-    local python_venv_pkg="python${python_version}-venv"
-
-    echo "开始升级 Python 到 ${python_version}..."
-    
-    case "$os_id" in
-        "debian")
-            case "$os_version" in
-                "10")
-                    echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list
-                    apt update
-                    apt -t buster-backports install -y python3.10 python3.10-dev python3.10-venv
-                    ;;
-                "11"|"12")
-                    sudo apt update
-                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
-                        echo "成功将 Python 升级到 ${python_version}。"
-                    else
-                        echo "升级 Python 到 ${python_version} 失败。"
-                        return 1
-                    fi
-                    ;;
-                *)
-                    echo "不支持的 Debian 版本: ${os_version}"
-                    return 1
-                    ;;
-            esac
-            ;;
-        "ubuntu")
-            case "$os_version" in
-                "20.04"|"22.04"|"24.04")
-                    sudo apt install -y software-properties-common
-                    sudo add-apt-repository ppa:deadsnakes/ppa -y
-                    sudo apt update
-                    if sudo apt install -y "$python_pkg" "$python_dev_pkg" "$python_venv_pkg"; then
-                        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/"$python_pkg" 1
-                        echo "成功将 Python 升级到 ${python_version}。"
-                    else
-                        echo "升级 Python 到 ${python_version} 失败。"
-                        return 1
-                    fi
-                    ;;
-                *)
-                    echo "不支持的 Ubuntu 版本: ${os_version}"
-                    return 1
-                    ;;
-            esac
-            ;;
-        *)
-            echo "不支持的操作系统: ${os_id}"
-            return 1
-            ;;
-    esac
-}
-
-# 添加 Python 依赖修复函数
-fix_python_deps() {
-    echo "修复 Python 依赖..."
-    # 修复 apt_pkg 模块
-    if ! python3 -c "import apt_pkg" 2>/dev/null; then
-        echo "重新安装 python3-apt 以修复 apt_pkg 模块..."
-        apt-get remove --purge -y python3-apt
-        apt-get install -y python3-apt
-    fi
-}
-
-# 在环境检查后添加 Python 版本检查
 echo "检查 Python 版本要求..."
-if ! check_python_version; then
-    echo "正在升级 Python..."
-    upgrade_python
-    if ! check_python_version; then
-        echo "Python 版本升级失败"
-        exit 1
-    fi
-    echo "Python 已成功升级到 3.10+"
-    fix_python_deps
-fi
+check_python_version || exit 1
 
 # 检查 netstat 命令
 if ! command -v netstat &> /dev/null; then
@@ -441,13 +357,6 @@ apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-ess
     echo "依赖安装失败，请检查系统配置"
     exit 1
 }
-
-# 检查 Python 环境
-if ! python3 -c "import distutils" 2>/dev/null; then
-    echo "正在安装 Python 兼容环境..."
-    apt install -y python3.7 python3.7-distutils
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
-fi
 
 apt upgrade -y
 apt install -y fail2ban python3-venv python3-pip libssl-dev libffi-dev build-essential libpython3-dev authbind git curl netstat-nat
