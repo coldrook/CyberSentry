@@ -155,9 +155,16 @@ restart_ssh_service() {
     systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null
 }
 
+ensure_sshd_runtime_dir() {
+    mkdir -p /run/sshd
+    chown root:sys /run/sshd 2>/dev/null || chown root:root /run/sshd
+    chmod 755 /run/sshd
+}
+
 print_ssh_diagnostics() {
     local port="$1"
     echo "SSH 诊断信息："
+    ensure_sshd_runtime_dir
     sshd -T -C user=root,host=localhost,addr=127.0.0.1 2>/dev/null | grep -E '^(port|passwordauthentication|permitrootlogin|pubkeyauthentication|kbdinteractiveauthentication|challengeresponseauthentication|usepam|authenticationmethods|allowusers|denyusers|allowgroups|denygroups) ' || true
     if command -v ss >/dev/null 2>&1; then
         ss -tlnp | grep ":${port} " || true
@@ -189,6 +196,7 @@ verify_ssh_new_session() {
     local key_file="${3:-}"
 
     echo "验证 SSH 新会话可用性..."
+    ensure_sshd_runtime_dir
     if ! sshd -t; then
         echo "错误：SSH 配置语法检查失败，未继续。"
         return 1
@@ -981,6 +989,7 @@ EOF
 
             # 测试配置
             echo "测试 SSH 配置..."
+            ensure_sshd_runtime_dir
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复默认配置"
                 # 找到最新的备份文件
@@ -1043,6 +1052,7 @@ PermitRootLogin yes
 EOF
 
             echo "测试 SSH 配置..."
+            ensure_sshd_runtime_dir
             if ! sshd -t; then
                 echo "SSH 配置测试失败，恢复备份"
                 LATEST_BACKUP=$(find /root/config_backups -name "sshd_config*.bak" -print0 | xargs -0 ls -1t | head -n 1)
