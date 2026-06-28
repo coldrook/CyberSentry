@@ -178,7 +178,8 @@ configure_ssh_socket_port() {
     cat > /etc/systemd/system/ssh.socket.d/cybersentry-port.conf <<EOF
 [Socket]
 ListenStream=
-ListenStream=${port}
+ListenStream=0.0.0.0:${port}
+ListenStream=[::]:${port}
 EOF
 }
 
@@ -209,11 +210,19 @@ print_ssh_diagnostics() {
 
 test_ssh_tcp_port() {
     local port="$1"
-    if command -v nc >/dev/null 2>&1; then
-        timeout 5 nc -z 127.0.0.1 "$port"
-        return $?
-    fi
-    timeout 5 bash -c "</dev/tcp/127.0.0.1/$port" >/dev/null 2>&1
+    local host
+    for host in 127.0.0.1 ::1; do
+        if command -v nc >/dev/null 2>&1; then
+            if timeout 5 nc -z "$host" "$port" >/dev/null 2>&1; then
+                echo "$host"
+                return 0
+            fi
+        elif timeout 5 bash -c "</dev/tcp/$host/$port" >/dev/null 2>&1; then
+            echo "$host"
+            return 0
+        fi
+    done
+    return 1
 }
 
 test_ssh_key_login() {
@@ -241,12 +250,13 @@ verify_ssh_new_session() {
         return 1
     }
 
-    if ! test_ssh_tcp_port "$port"; then
-        echo "错误：无法连接到本机 SSH 新端口 127.0.0.1:${port}。"
+    local ssh_test_host
+    if ! ssh_test_host=$(test_ssh_tcp_port "$port"); then
+        echo "错误：无法连接到本机 SSH 新端口 ${port}（已测试 127.0.0.1 和 ::1）。"
         print_ssh_diagnostics "$port"
         return 1
     fi
-    echo "SSH 新端口监听正常：127.0.0.1:${port}"
+    echo "SSH 新端口监听正常：${ssh_test_host}:${port}"
 
     if [ "$auth_choice" = "1" ] || [ "$auth_choice" = "2" ]; then
         if [ -n "$key_file" ] && [ -f "$key_file" ]; then
