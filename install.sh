@@ -153,10 +153,33 @@ check_installed() {
 }
 
 restart_ssh_service() {
+    systemctl daemon-reload
+    if systemctl cat ssh.socket >/dev/null 2>&1 && systemctl is-enabled ssh.socket >/dev/null 2>&1; then
+        systemctl restart ssh.socket || return 1
+        if systemctl is-active --quiet ssh || systemctl is-active --quiet sshd; then
+            systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+        fi
+        return 0
+    fi
     if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; then
         return 0
     fi
     systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null
+}
+
+configure_ssh_socket_port() {
+    local port="$1"
+    if ! systemctl cat ssh.socket >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "检测到 systemd ssh.socket，正在同步 ListenStream 到端口 ${port}..."
+    mkdir -p /etc/systemd/system/ssh.socket.d
+    cat > /etc/systemd/system/ssh.socket.d/cybersentry-port.conf <<EOF
+[Socket]
+ListenStream=
+ListenStream=${port}
+EOF
 }
 
 ensure_sshd_runtime_dir() {
@@ -170,10 +193,16 @@ print_ssh_diagnostics() {
     echo "SSH 诊断信息："
     ensure_sshd_runtime_dir
     sshd -T -C user=root,host=localhost,addr=127.0.0.1 2>/dev/null | grep -E '^(port|passwordauthentication|permitrootlogin|pubkeyauthentication|kbdinteractiveauthentication|challengeresponseauthentication|usepam|authenticationmethods|allowusers|denyusers|allowgroups|denygroups) ' || true
+    if systemctl cat ssh.socket >/dev/null 2>&1; then
+        echo "ssh.socket 状态："
+        systemctl status ssh.socket --no-pager 2>/dev/null || true
+        systemctl cat ssh.socket 2>/dev/null || true
+    fi
+    echo "当前 SSH 监听端口："
     if command -v ss >/dev/null 2>&1; then
-        ss -tlnp | grep ":${port} " || true
+        ss -tlnp | grep -E ":(22|${port})[[:space:]]" || true
     elif command -v netstat >/dev/null 2>&1; then
-        netstat -tlnp 2>/dev/null | grep ":${port} " || true
+        netstat -tlnp 2>/dev/null | grep -E ":(22|${port})[[:space:]]" || true
     fi
     journalctl -u ssh --no-pager -n 40 2>/dev/null || journalctl -u sshd --no-pager -n 40 2>/dev/null || true
 }
@@ -918,6 +947,7 @@ if [ "$SSH_CONFIGURED" != "true" ]; then
 
     # 更新 SSH 配置文件
     sed -i "s/^#\?Port.*/Port ${NEW_SSH_PORT}/" /etc/ssh/sshd_config
+    configure_ssh_socket_port "$NEW_SSH_PORT"
 
     if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
         echo "临时放行新的 SSH 端口 ${NEW_SSH_PORT}，旧端口会在新会话确认后再处理。"
